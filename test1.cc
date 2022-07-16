@@ -4,13 +4,37 @@
 
 #include "libplatform/libplatform.h"
 #include "v8.h"
-//#include "console.h"
 
-void Log(const v8::FunctionCallbackInfo<v8::Value>& args);
+namespace ryze {
 
-void ReportException(v8::Isolate *isolate, v8::TryCatch *try_catch);
+using v8::Array;
+using v8::Context;
+using v8::Function;
+using v8::FunctionCallbackInfo;
+using v8::FunctionTemplate;
+using v8::HandleScope;
+using v8::Integer;
+using v8::IntegrityLevel;
+using v8::Isolate;
+using v8::Just;
+using v8::Local;
+using v8::Maybe;
+using v8::MaybeLocal;
+using v8::Module;
+using v8::Nothing;
+using v8::Object;
+using v8::PrimitiveArray;
+using v8::Promise;
+using v8::ScriptCompiler;
+using v8::ScriptOrigin;
+using v8::String;
+using v8::TryCatch;
+using v8::UnboundScript;
+using v8::Undefined;
+using v8::Value;
 
-void ReadFile(const v8::FunctionCallbackInfo<v8::Value> &args);
+void Log(const FunctionCallbackInfo<Value> &args);
+void ReportException(Isolate *isolate, TryCatch *try_catch);
 
 v8::MaybeLocal<v8::Module> ResolveModuleCallback(
     v8::Local<v8::Context> context,
@@ -44,19 +68,22 @@ int main(int argc, char *argv[]) {
     
         
         v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(isolate);
+        
+        /*
         v8::Local<v8::ObjectTemplate> other = v8::ObjectTemplate::New(isolate);
         other->Set(v8::String::NewFromUtf8(isolate, "log", 
             v8::NewStringType::kNormal).ToLocalChecked(), 
             v8::FunctionTemplate::New(isolate, Log));
         global->Set(v8::String::NewFromUtf8(isolate, "other", 
             v8::NewStringType::kNormal).ToLocalChecked(), other);
-        
+        */
         
         // Create a new context
         v8::Local<v8::Context> context = v8::Context::New(isolate, NULL, global);
         
         
-        /*v8::Local<v8::Object> globalInstance = context->Global();
+        /*
+        v8::Local<v8::Object> globalInstance = context->Global();
         globalInstance->Set(context, v8::String::NewFromUtf8Literal(isolate, "global", 
             v8::NewStringType::kNormal), globalInstance).Check();
         */
@@ -192,7 +219,7 @@ void ReportException(v8::Isolate *isolate, v8::TryCatch *try_catch) {
     }
 }
 
-
+} // namespace ryze
 
 
 
