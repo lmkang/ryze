@@ -1,3 +1,7 @@
 import sayHello from './func.js';
 
-sayHello();
+(async function() {
+    var a = await sayHello();
+    console.log(a);
+})();
+
