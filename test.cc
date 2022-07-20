@@ -4,22 +4,16 @@
 #include "libplatform/libplatform.h"
 #include "v8.h"
 
-using v8::Array;
 using v8::Context;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::ObjectTemplate;
 using v8::HandleScope;
-using v8::Integer;
-using v8::IntegrityLevel;
 using v8::Isolate;
-using v8::Just;
 using v8::Local;
-using v8::Maybe;
 using v8::MaybeLocal;
 using v8::Module;
-using v8::Nothing;
 using v8::Object;
 using v8::PrimitiveArray;
 using v8::Promise;
@@ -28,17 +22,16 @@ using v8::ScriptOrigin;
 using v8::String;
 using v8::NewStringType;
 using v8::TryCatch;
-using v8::UnboundScript;
-using v8::Undefined;
 using v8::Value;
 using v8::Message;
+using v8::FixedArray;
 
 MaybeLocal<String> ReadFile(Isolate *isolate, const char *name);
 void ReportException(Isolate *isolate, TryCatch *try_catch);
 MaybeLocal<Module> ResolveModuleCallback(
     Local<Context> context,
     Local<String> specifier,
-    Local<v8::FixedArray> import_assertions,
+    Local<FixedArray> import_assertions,
     Local<Module> referer);
 
 void Log(const FunctionCallbackInfo<Value> &args);
@@ -79,17 +72,16 @@ int main(int argc, char *argv[]) {
         Local<Context> context = Context::New(isolate, NULL, global_tmpl);
         
         /*
-        v8::Local<v8::Object> globalInstance = context->Global();
-        globalInstance->Set(context, v8::String::NewFromUtf8Literal(isolate, "global", 
-            v8::NewStringType::kNormal), globalInstance).Check();
+        Local<Object> globalInstance = context->Global();
+        globalInstance->Set(context, String::NewFromUtf8Literal(isolate, "global", 
+            NewStringType::kNormal), globalInstance).Check();
         */
         
         Local<Object> globalObj = context->Global();
         Local<Object> consoleObj = ObjectTemplate::New(isolate)->
             NewInstance(context).ToLocalChecked();
-        Local<Function> func = Function::New(context, Log).ToLocalChecked();
-        consoleObj->Set(context, String::NewFromUtf8(isolate, "log")
-            .ToLocalChecked(), func).ToChecked();
+        consoleObj->Set(context, String::NewFromUtf8(isolate, "log").ToLocalChecked(), 
+            Function::New(context, Log).ToLocalChecked()).ToChecked();
         globalObj->Set(context, String::NewFromUtf8(isolate, "console")
             .ToLocalChecked(), consoleObj).ToChecked();
         
@@ -144,7 +136,7 @@ int main(int argc, char *argv[]) {
 MaybeLocal<Module> ResolveModuleCallback(
     Local<Context> context,
     Local<String> specifier,
-    Local<v8::FixedArray> import_assertions,
+    Local<FixedArray> import_assertions,
     Local<Module> referer) {
     
     Isolate *isolate = context->GetIsolate();
