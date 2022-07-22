@@ -1,5 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <assert.h>
+
+#include <string>
+#include <vector>
+#include <iomanip>
+#include <iterator>
+#include <unordered_map>
 
 #include "libplatform/libplatform.h"
 #include "v8.h"
@@ -26,16 +34,25 @@ using v8::Value;
 using v8::Message;
 using v8::FixedArray;
 
-MaybeLocal<String> ReadFile(Isolate *isolate, const char *name);
+MaybeLocal<String> ReadFile(Isolate *isolate, const std::string path);
 void ReportException(Isolate *isolate, TryCatch *try_catch);
 MaybeLocal<Module> ResolveModuleCallback(
     Local<Context> context,
     Local<String> specifier,
     Local<FixedArray> import_assertions,
     Local<Module> referer);
+void HostInitializeImportMetaObject(
+    Local<Context> context,
+    Local<Module> module,
+    Local<Object> meta);
 
 void Log(const FunctionCallbackInfo<Value> &args);
+void DirName(const FunctionCallbackInfo<Value> &args);
+void Join(const FunctionCallbackInfo<Value> &args);
 void Read(const FunctionCallbackInfo<Value> &args);
+
+std::string g_cwd;
+std::unordered_map<int, std::string> module_to_specifier_map;
 
 int main(int argc, char *argv[]) {
     // Initialize V8
@@ -50,11 +67,15 @@ int main(int argc, char *argv[]) {
     }
 #endif
     v8::V8::Initialize();
-
+    char *cwd = new char(255);
+    getcwd(cwd, 255);
+    g_cwd = cwd;
+    
     // Create a new Isolate and make it the current one
     Isolate::CreateParams create_params;
     create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
     Isolate *isolate = Isolate::New(create_params);
+    isolate->SetHostInitializeImportMetaObjectCallback(HostInitializeImportMetaObject);
     {
         Isolate::Scope isolate_scope(isolate);
         // Create a stack-allocated handle scope
@@ -67,6 +88,14 @@ int main(int argc, char *argv[]) {
             .ToLocalChecked(), FunctionTemplate::New(isolate, Read));
         global_tmpl->Set(String::NewFromUtf8(isolate, "fs", 
             NewStringType::kNormal).ToLocalChecked(), fs_tmpl);
+        
+        Local<ObjectTemplate> path_tmpl = ObjectTemplate::New(isolate);
+        path_tmpl->Set(String::NewFromUtf8(isolate, "dirname", NewStringType::kNormal)
+            .ToLocalChecked(), FunctionTemplate::New(isolate, DirName));
+        path_tmpl->Set(String::NewFromUtf8(isolate, "join", NewStringType::kNormal)
+            .ToLocalChecked(), FunctionTemplate::New(isolate, Join));
+        global_tmpl->Set(String::NewFromUtf8(isolate, "path", 
+            NewStringType::kNormal).ToLocalChecked(), path_tmpl);
         
         // Create a new context
         Local<Context> context = Context::New(isolate, NULL, global_tmpl);
@@ -89,7 +118,7 @@ int main(int argc, char *argv[]) {
             // Enter the context for compiling and running the hello world script
             Context::Scope context_scope(context);
             Local<String> resource_name = String::NewFromUtf8(
-                isolate, "./main.js").ToLocalChecked();
+                isolate, "./js/main.js").ToLocalChecked();
             Local<PrimitiveArray> options = PrimitiveArray::New(isolate, 2);
             options->Set(isolate, 0, v8::Uint32::New(isolate, 0xF1F2F3F0));
             options->Set(isolate, 1, resource_name);
@@ -106,11 +135,13 @@ int main(int argc, char *argv[]) {
                 true,
                 options
             );
-            String::Utf8Value file_name(isolate, resource_name);
-            MaybeLocal<String> source_text = ReadFile(isolate, *file_name);
+            String::Utf8Value file_path(isolate, resource_name);
+            MaybeLocal<String> source_text = ReadFile(isolate, *file_path);
             ScriptCompiler::Source source(source_text.ToLocalChecked(), origin);
             Local<Module> module;
             if(ScriptCompiler::CompileModule(isolate, &source).ToLocal(&module)) {
+                module_to_specifier_map.insert(std::make_pair(
+                    module->GetIdentityHash(), *file_path));
                 if(module->InstantiateModule(context, 
                     ResolveModuleCallback).FromMaybe(false)) {
                     Local<Value> result;
@@ -133,6 +164,40 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
+std::string NormalizePath(const std::string &path, const std::string &dir) {
+    std::string absolute_path;
+    if(path[0] == '/') {
+        absolute_path = path;
+    } else {
+        absolute_path = dir + '/' + path;
+    }
+    std::vector<std::string> segments;
+    std::istringstream segment_stream(absolute_path);
+    std::string segment;
+    while(std::getline(segment_stream, segment, '/')) {
+        if(segment == "..") {
+            if(!segments.empty()) {
+                segments.pop_back();
+            }
+        } else if(segment != ".") {
+            segments.push_back(segment);
+        }
+    }
+    // Join path segments.
+    std::ostringstream os;
+    if(segments.size() > 1) {
+        std::copy(segments.begin(), segments.end() - 1,
+            std::ostream_iterator<std::string>(os, "/"));
+        os << *segments.rbegin();
+    } else {
+        os << "/";
+        if(!segments.empty()) {
+            os << segments[0];
+        }
+    }
+    return os.str();
+}
+
 MaybeLocal<Module> ResolveModuleCallback(
     Local<Context> context,
     Local<String> specifier,
@@ -140,10 +205,19 @@ MaybeLocal<Module> ResolveModuleCallback(
     Local<Module> referer) {
     
     Isolate *isolate = context->GetIsolate();
-    String::Utf8Value file_name(isolate, specifier);
-    MaybeLocal<String> source_text = ReadFile(isolate, *file_name);
+    String::Utf8Value path(isolate, specifier);
+    
+    auto specifier_it = module_to_specifier_map.find(referer->GetIdentityHash());
+    std::string str = specifier_it->second;
+    std::string dir("");
+    size_t index = str.find_last_of('/');
+    if(index != std::string::npos) {
+        dir = str.substr(0, index);
+    }
+    std::string absolute_path = NormalizePath(*path, dir);
+    MaybeLocal<String> source_text = ReadFile(isolate, absolute_path);
     if(source_text.IsEmpty()) {
-        printf("Error reading  module from %s\n", *file_name);
+        printf("Error reading  module from %s\n", *path);
         return MaybeLocal<Module>();
     }
     Local<PrimitiveArray> options = PrimitiveArray::New(isolate, 2);
@@ -165,13 +239,41 @@ MaybeLocal<Module> ResolveModuleCallback(
     ScriptCompiler::Source source(source_text.ToLocalChecked(), origin);
     Local<Module> module;
     if(ScriptCompiler::CompileModule(isolate, &source).ToLocal(&module)) {
+        module_to_specifier_map.insert(std::make_pair(
+        module->GetIdentityHash(), absolute_path));
         return module;
     }
     return MaybeLocal<Module>();
 }
 
-MaybeLocal<String> ReadFile(Isolate *isolate, const char *name) {
-    FILE *file = fopen(name, "rb");
+void HostInitializeImportMetaObject(
+    Local<Context> context,
+    Local<Module> module,
+    Local<Object> meta) {
+    
+    Isolate *isolate = context->GetIsolate();
+    HandleScope handle_scope(isolate);
+    auto specifier_it = module_to_specifier_map.find(module->GetIdentityHash());
+    Local<String> url_key =String::NewFromUtf8Literal(isolate, "url", 
+        NewStringType::kInternalized);
+    Local<String> dirname_key =String::NewFromUtf8Literal(isolate, "dirname", 
+        NewStringType::kInternalized);
+    std::string absolute_path = g_cwd + "/" + specifier_it->second;
+    Local<String> url = String::NewFromUtf8(isolate, 
+        absolute_path.c_str()).ToLocalChecked();
+    size_t index = absolute_path.find_last_of('/');
+    std::string dir;
+    if(index != std::string::npos) {
+        dir = absolute_path.substr(0, index);
+    }
+    Local<String> dirname = String::NewFromUtf8(isolate, 
+        dir.c_str()).ToLocalChecked();
+    meta->CreateDataProperty(context, url_key, url).ToChecked();
+    meta->CreateDataProperty(context, dirname_key, dirname).ToChecked();
+}
+
+MaybeLocal<String> ReadFile(Isolate *isolate, const std::string path) {
+    FILE *file = fopen(path.c_str(), "rb");
     if(file == NULL) {
         return MaybeLocal<String>();
     }
@@ -234,22 +336,57 @@ void ReportException(Isolate *isolate, TryCatch *try_catch) {
 }
 
 void Log(const FunctionCallbackInfo<Value> &args) {
+    for(int i = 0; i < args.Length(); i++) {
+        String::Utf8Value str(args.GetIsolate(), args[i]);
+        fprintf(stdout, "%s ", *str);
+    }
+    fprintf(stdout, "\n");
+}
+
+void DirName(const FunctionCallbackInfo<Value> &args) {
     String::Utf8Value str(args.GetIsolate(), args[0]);
-    printf("%s\n", *str);
+    std::string path = *str;
+    size_t index = path.find_last_of('/');
+    std::string dir;
+    if(index != std::string::npos) {
+        dir = path.substr(0, index);
+    }
+    args.GetReturnValue().Set(String::NewFromUtf8(args.GetIsolate(), dir.c_str(), 
+        NewStringType::kNormal, static_cast<int>(dir.size())).ToLocalChecked());
+}
+
+void Join(const FunctionCallbackInfo<Value> &args) {
+    std::string path("");
+    std::string seg;
+    for(int i = 0; i < args.Length(); i++) {
+        String::Utf8Value str(args.GetIsolate(), args[i]);
+        seg = *str;
+        if(i == 0) {
+            size_t size = seg.size();
+            if(seg[size -1] == '/') {
+                seg = seg.substr(0, size - 1);
+            }
+            path.append(seg);
+        } else {
+            if(seg[0] == '/') {
+                path.append(seg.substr(1));
+            } else {
+                path.append("/").append(seg);
+            }
+        }
+    }
+    args.GetReturnValue().Set(String::NewFromUtf8(args.GetIsolate(), path.c_str(), 
+        NewStringType::kNormal, static_cast<int>(path.size())).ToLocalChecked());
 }
 
 void Read(const FunctionCallbackInfo<Value> &args) {
-    if(args.Length() != 1) {
-        args.GetIsolate()->ThrowError("Bad parameters length");
-        return;
-    }
-    String::Utf8Value file_name(args.GetIsolate(), args[0]);
-    Local<String> source;
-    if(!ReadFile(args.GetIsolate(), *file_name).ToLocal(&source)) {
+    String::Utf8Value path(args.GetIsolate(), args[0]);
+    Local<String> value;
+    if(!ReadFile(args.GetIsolate(), *path).ToLocal(&value)) {
         args.GetIsolate()->ThrowError("Error loading file");
         return;
     }
-    args.GetReturnValue().Set(source);
+    args.GetReturnValue().Set(value);
 }
 
 
