@@ -33,7 +33,8 @@ void setnonblocking(int sockfd) {
 
 int main(){
     struct epoll_event ev, events[MAX_EVENTS]; //ev负责添加事件，events接收返回事件
-    int addrlen, listenfd, conn_sock, nfds, epfd, fd, i, nread, n;
+    socklen_t addrlen;
+    int listenfd, conn_sock, nfds, epfd, fd, i, nread, n;
     struct sockaddr_in local, remote;
     char buf[BUFSIZ];
 
@@ -77,7 +78,7 @@ int main(){
             fd = events[i].data.fd;
             if (fd == listenfd) {
                 while ((conn_sock = accept(listenfd,(struct sockaddr *) &remote,
-                                (size_t *)&addrlen)) > 0) {
+                                &addrlen)) > 0) {
                     setnonblocking(conn_sock);//下面设置ET模式，所以要设置非阻塞
                     ev.events = EPOLLIN | EPOLLET;
                     ev.data.fd = conn_sock;
