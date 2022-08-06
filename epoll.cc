@@ -1,137 +1,201 @@
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/epoll.h>
-#include <sys/sendfile.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <string.h>
-#include <strings.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#include <unistd.h>
 
-#define MAX_EVENTS 10
-#define PORT 8080
+#define MAX_EVENTS 16
 
-//设置socket连接为非阻塞模式
-void setnonblocking(int sockfd) {
-    int opts;
-    opts = fcntl(sockfd, F_GETFL);
-    if(opts < 0) {
-        perror("fcntl(F_GETFL)\n");
-        exit(1);
-    }
-    opts = (opts | O_NONBLOCK);
-    if(fcntl(sockfd, F_SETFL, opts) < 0) {
-        perror("fcntl(F_SETFL)\n");
-        exit(1);
-    }
+namespace cattle {
+namespace list {
+
+struct item {
+    struct item *prev;
+    struct item *next;
+    void *data;
+};
+
+struct list {
+    struct item *head;
+    struct item *tail;
+    pthread_cond_t *cond;
+    pthread_mutex_t *mutex;
+};
+
+struct list *list_init() {
+    struct list *li = (struct list *) malloc(sizeof(struct list));
+    li->head = NULL;
+    li->tail = NULL;
+    li->cond = (pthread_cond_t *) malloc(sizeof(pthread_cond_t));
+    li->mutex = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+    pthread_cond_init(li->cond, NULL);
+    pthread_mutex_init(li->mutex, NULL);
+    return li;
 }
 
-int main(){
-    struct epoll_event ev, events[MAX_EVENTS]; //ev负责添加事件，events接收返回事件
-    socklen_t addrlen;
-    int listenfd, conn_sock, nfds, epfd, fd, i, nread, n;
-    struct sockaddr_in local, remote;
-    char buf[BUFSIZ];
+void list_free(struct list *li) {
+    pthread_cond_destroy(li->cond);
+    pthread_mutex_destroy(li->mutex);
+    free(li->cond);
+    free(li->mutex);
+    free(li);
+}
 
-    //创建listen socket
-    if( (listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("sockfd\n");
-        exit(1);
+void list_add(struct list *li, void *data) {
+    struct item *it = (struct item *) malloc(sizeof(struct item));
+    it->prev = NULL;
+    it->next = NULL;
+    it->data = data;
+    pthread_mutex_lock(li->mutex);
+    if(li->head == NULL) {
+        li->head = it;
+        li->tail = it;
+    } else {
+        li->tail->next = it;
+        it->prev = li->tail;
+        li->tail = it;
     }
-    setnonblocking(listenfd);//listenfd设置为非阻塞[1]
-    bzero(&local, sizeof(local));
-    local.sin_family = AF_INET;
-    local.sin_addr.s_addr = htonl(INADDR_ANY);;
-    local.sin_port = htons(PORT);
-    if( bind(listenfd, (struct sockaddr *) &local, sizeof(local)) < 0) {
-        perror("bind\n");
-        exit(1);
+    pthread_mutex_unlock(li->mutex);
+    pthread_cond_signal(li->cond);
+}
+
+struct item *list_remove(struct list *li) {
+    struct item *it = NULL;
+    pthread_mutex_lock(li->mutex);
+    if(li->tail != NULL) {
+        it = li->tail;
+        li->tail = li->tail->prev;
+        li->tail->next = NULL;
+        it->prev = NULL;
     }
-    listen(listenfd, 20);
+    pthread_mutex_unlock(li->mutex);
+    pthread_cond_signal(li->cond);
+    return it;
+}
 
-    epfd = epoll_create(MAX_EVENTS);
-    if (epfd == -1) {
-        perror("epoll_create");
-        exit(EXIT_FAILURE);
-    }
+} // namespace list
+} // namespace cattle
 
-    ev.events = EPOLLIN;
-    ev.data.fd = listenfd;
-    if (epoll_ctl(epfd, EPOLL_CTL_ADD, listenfd, &ev) == -1) {//监听listenfd
-        perror("epoll_ctl: listen_sock");
-        exit(EXIT_FAILURE);
-    }
+using namespace cattle;
 
-    for (;;) {
-        nfds = epoll_wait(epfd, events, MAX_EVENTS, -1);
-        if (nfds == -1) {
-            perror("epoll_pwait");
-            exit(EXIT_FAILURE);
-        }
+struct task_info {
+    void *(*callback)(void *arg);
+    void *arg;
+};
 
-        for (i = 0; i < nfds; ++i) {
-            fd = events[i].data.fd;
-            if (fd == listenfd) {
-                while ((conn_sock = accept(listenfd,(struct sockaddr *) &remote,
-                                &addrlen)) > 0) {
-                    setnonblocking(conn_sock);//下面设置ET模式，所以要设置非阻塞
-                    ev.events = EPOLLIN | EPOLLET;
-                    ev.data.fd = conn_sock;
-                    if (epoll_ctl(epfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1) {//读监听
-                        perror("epoll_ctl: add"); //连接套接字
-                        exit(EXIT_FAILURE);
-                    }
-                }
-                if (conn_sock == -1) {
-                    if (errno != EAGAIN && errno != ECONNABORTED
-                            && errno != EPROTO && errno != EINTR)
-                        perror("accept");
-                }
-                continue;
-            }
-            if (events[i].events & EPOLLIN) {
-                n = 0;
-                while ((nread = read(fd, buf + n, BUFSIZ-1)) > 0) {//ET下可以读就一直读
-                    n += nread;
-                }
-                if (nread == -1 && errno != EAGAIN) {
-                    perror("read error");
-                }
-                ev.data.fd = fd;
-                ev.events = events[i].events | EPOLLOUT; //MOD OUT
-                if (epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev) == -1) {
-                    perror("epoll_ctl: mod");
-                }
-            }
-            if (events[i].events & EPOLLOUT) {
-              sprintf(buf, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\nHello World", 11);
-                int nwrite, data_size = strlen(buf);
-                n = data_size;
-                while (n > 0) {
-                    nwrite = write(fd, buf + data_size - n, n);//ET下一直将要写数据写完
-                    if (nwrite < n) {
-                        if (nwrite == -1 && errno != EAGAIN) {
-                            perror("write error");
-                        }
-                        break;
-                    }
-                    n -= nwrite;
-                }
-                close(fd);
+struct thread_param {
+    int fd;
+    struct list::list *task_list;
+};
+
+void *thread_func(void *arg);
+void *task_callback(void *arg);
+void process_task(int fd, struct list::list *task_list);
+void setnonblock(int fd);
+char *read_file(const char *file_name);
+
+struct epoll_event ep_events[MAX_EVENTS];
+int epfd = -1;
+int evfd = -1;
+
+int main(int argc, char **argv) {
+    struct list::list *task_list = list::list_init();
+    evfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = evfd;
+    epfd = epoll_create1(EPOLL_CLOEXEC);
+    epoll_ctl(epfd, EPOLL_CTL_ADD, evfd, &ev);
+    
+    struct thread_param *param = (struct thread_param *) malloc(sizeof(struct thread_param));
+    param->fd = evfd;
+    param->task_list = task_list;
+    pthread_t thread_id;
+    pthread_create(&thread_id, NULL, thread_func, param);
+    pthread_detach(thread_id);
+    
+    int nfds = -1;
+    uint64_t ev_result;
+    for(;;) {
+        nfds = epoll_wait(epfd, ep_events, MAX_EVENTS, -1);
+        printf("nfds: %d\n", nfds);
+        for(int i = 0; i < nfds; i++) {
+            if(ep_events[i].events & EPOLLIN) {
+                process_task(ep_events[i].data.fd, task_list);
             }
         }
     }
+    list::list_free(task_list);
+    close(evfd);
+    close(epfd);
     return 0;
 }
 
+void *thread_func(void *arg) {
+    sleep(3);
+    struct thread_param *param = (struct thread_param *) arg;
+    struct task_info *task = (struct task_info *) malloc(sizeof(struct task_info));
+    task->callback = task_callback;
+    task->arg = (void *) "./fs/file.txt";
+    list::list_add(param->task_list, task);
+    uint64_t value = 123;
+    write(param->fd, (void *) value, sizeof(uint64_t));
+    return NULL;
+}
 
+void *task_callback(void *arg) {
+    return read_file((const char *) arg);
+}
 
+void process_task(int fd, struct list::list *task_list) {
+    struct list::item *it = list::list_remove(task_list);
+    struct task_info *task = (struct task_info *) it->data;
+    char *data = (char *) task->callback(task->arg);
+    printf("task content: %s\n", data);
+    free(data);
+    free(task);
+    free(it);
+    uint64_t result;
+    read(fd, &result, sizeof(uint64_t));
+}
 
+void setnonblock(int fd) {
+    int opts = fcntl(fd, F_GETFL);
+    if(opts < 0) {
+        perror("fcntl(F_GETFL)\n");
+    }
+    opts |= O_NONBLOCK;
+    if(fcntl(fd, F_SETFL, opts) < 0) {
+        perror("fcntl(F_SETFL)\n");
+    }
+}
+
+char *read_file(const char *file_name) {
+    FILE *file = fopen(file_name, "rb");
+    if(file == NULL) {
+        return NULL;
+    }
+    fseek(file, 0, SEEK_END);
+    size_t size = ftell(file);
+    rewind(file);
+    char *chars = (char *) malloc(sizeof(char) * (size + 1));
+    chars[size] = '\0';
+    for(size_t i = 0; i < size; ) {
+        i += fread(&chars[i], 1, size - i, file);
+        if(ferror(file)) {
+            fclose(file);
+            free(chars);
+            return NULL;
+        }
+    }
+    fclose(file);
+    return chars;
+}
 
 
 

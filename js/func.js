@@ -1,10 +1,15 @@
 import {sort} from './utils.js';
 
-export default async function() {
+export async function sayHello() {
     return new Promise((resolve, reject) => {
         var content = fs.read(path.join(import.meta.dirname, 'file.txt'));
         resolve(content);
     });
+}
+
+export function testCallback(callback) {
+    console.log('test callback');
+    callback();
 }
 
 console.log(import.meta.url, import.meta.dirname);
