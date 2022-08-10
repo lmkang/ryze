@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
         globalObj->Set(context, String::NewFromUtf8(isolate, "console")
             .ToLocalChecked(), consoleObj).ToChecked();
         
-        {
+        //{
             // Enter the context for compiling and running the hello world script
             Context::Scope context_scope(context);
             Local<String> resource_name = String::NewFromUtf8(
@@ -177,53 +177,51 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
-            
+        //}
+        
+        for(int i = 0; i < 4; i++) {
+            pthread_t thread_id;
+            pthread_create(&thread_id, NULL, thread_func, loop);
+            pthread_detach(thread_id);
         }
+        
+        //HandleScope handle_scope(isolate);
+        //Local<Context> context(isolate->GetCurrentContext());
+        while(1) {
+            pthread_mutex_lock(&loop->done_mutex);
+            while(list_empty(loop->done_list)) {
+                pthread_cond_wait(&loop->done_cond, &loop->done_mutex);
+            }
+            struct list_head *head = loop->done_list;
+            struct list_head *p = head->next;
+            struct list_head *entry;
+            struct ev_fs_t *task;
+            while(p != head) {
+                entry = p;
+                p = p->next;
+                list_del(entry);
+                task = list_entry(entry, struct ev_fs_t, entry);
+                auto r = Local<Promise::Resolver>::New(isolate, *(task->cb.defer));
+                auto result = r->Resolve(context, String::NewFromUtf8(isolate, 
+                    (char *) task->cb.result).ToLocalChecked());
+                free(task);
+                free(task->cb.result);
+                free(task->cb.defer);
+            }
+            pthread_mutex_unlock(&loop->done_mutex);
+            pthread_cond_signal(&loop->done_cond);
+        }
+        
+        pthread_mutex_destroy(&loop->pending_mutex);
+        pthread_cond_destroy(&loop->pending_cond);
+        pthread_mutex_destroy(&loop->done_mutex);
+        pthread_cond_destroy(&loop->done_cond);
+        free(loop->pending_list);
+        free(loop->done_list);
+        free(loop);
     }
     
-    pthread_t thread_id;
-    pthread_create(&thread_id, NULL, thread_func, loop);
-    pthread_detach(thread_id);
     
-    HandleScope handle_scope(isolate);
-    Local<Context> context(isolate->GetCurrentContext());
-    while(1) {
-        pthread_mutex_lock(&loop->done_mutex);
-        while(list_empty(loop->done_list)) {
-            pthread_cond_wait(&loop->done_cond, &loop->done_mutex);
-        }
-        struct list_head *head = loop->done_list;
-        struct list_head *p = head->next;
-        struct list_head *entry;
-        struct ev_fs_t *task;
-        printf("main thread lock\n");
-        while(p != head) {
-            entry = p;
-            p = p->next;
-            list_del(entry);
-            printf("main thread get list_del(entry)\n");
-            task = list_entry(entry, struct ev_fs_t, entry);
-            printf("main thread list_entry\n");
-            auto r = Local<Promise::Resolver>::New(isolate, *(task->cb.defer));
-            printf("main thread result: %s\n", (char *) task->cb.result);
-            auto result = r->Resolve(context, String::NewFromUtf8(isolate, 
-                (char *) task->cb.result).ToLocalChecked());
-            printf("main thread resolve\n");
-            free(task);
-            free(task->cb.defer);
-        }
-        pthread_mutex_unlock(&loop->done_mutex);
-        pthread_cond_signal(&loop->done_cond);
-    }
-    sleep(1);
-    
-    pthread_mutex_destroy(&loop->pending_mutex);
-    pthread_cond_destroy(&loop->pending_cond);
-    pthread_mutex_destroy(&loop->done_mutex);
-    pthread_cond_destroy(&loop->done_cond);
-    free(loop->pending_list);
-    free(loop->done_list);
-    free(loop);
     
     // Dispose the isolate and tear down V8
     isolate->Dispose();
@@ -460,24 +458,21 @@ void Read(const FunctionCallbackInfo<Value> &args) {
 
 void *thread_func(void *arg) {
     struct ev_loop_t *loop = (struct ev_loop_t *) arg;
-    pthread_mutex_lock(&loop->pending_mutex);
-    while(list_empty(loop->pending_list)) {
-        pthread_cond_wait(&loop->pending_cond, &loop->pending_mutex);
+    while(1) {
+        pthread_mutex_lock(&loop->pending_mutex);
+        while(list_empty(loop->pending_list)) {
+            pthread_cond_wait(&loop->pending_cond, &loop->pending_mutex);
+        }
+        struct list_head *entry = list_remove(loop->pending_list);
+        pthread_mutex_unlock(&loop->pending_mutex);
+        pthread_cond_signal(&loop->pending_cond);
+        struct ev_fs_t *task = list_entry(entry, struct ev_fs_t, entry);
+        task->cb.result = read_file((const char *) task->file_path);
+        pthread_mutex_lock(&loop->done_mutex);
+        list_add(&task->entry, loop->done_list);
+        pthread_mutex_unlock(&loop->done_mutex);
+        pthread_cond_signal(&loop->done_cond);
     }
-    struct list_head *entry = list_remove(loop->pending_list);
-    pthread_mutex_unlock(&loop->pending_mutex);
-    pthread_cond_signal(&loop->pending_cond);
-    printf("1. thread_func\n");
-    struct ev_fs_t *task = list_entry(entry, struct ev_fs_t, entry);
-    printf("2. thread_func\n");
-    task->cb.result = read_file((const char *) task->file_path);
-    printf("3. thread_func\n");
-    pthread_mutex_lock(&loop->done_mutex);
-    printf("4. thread_func\n");
-    list_add(&task->entry, loop->done_list);
-    printf("5. thread_func, done_list empty: %d\n", list_empty(loop->done_list));
-    pthread_mutex_unlock(&loop->done_mutex);
-    pthread_cond_signal(&loop->done_cond);
     return NULL;
 }
 
@@ -495,7 +490,6 @@ void ReadFileAsync(const FunctionCallbackInfo<Value> &args) {
     list_add(&task->entry, loop->pending_list);
     pthread_mutex_unlock(&loop->pending_mutex);
     pthread_cond_signal(&loop->pending_cond);
-    printf("ReadFileAsync, pending_list empty: %d\n", list_empty(loop->pending_list));
     args.GetReturnValue().Set(p->GetPromise());
 }
 

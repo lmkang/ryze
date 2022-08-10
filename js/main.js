@@ -10,7 +10,9 @@ testCallback(function() {
 });*/
 
 (async () => {
-    let content = await fs.readFileAsync();
-    console.log('file content: ', content);
+    for(let i = 0; i < 999; i++) {
+        let content = await fs.readFileAsync();
+        console.log(i + '. file content: ' + content);
+    }
 })();
 
