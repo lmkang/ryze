@@ -1,8 +1,8 @@
 #ifndef CATTLE_COMMON_H_
 #define CATTLE_COMMON_H_
 
-#include "v8/v8.h"
-#include "v8/libplatform/libplatform.h"
+#include "v8.h"
+#include "libplatform/libplatform.h"
 
 namespace cattle {
 
@@ -22,6 +22,7 @@ using v8::FunctionCallbackInfo;
 using v8::FunctionCallback;
 using v8::Function;
 using v8::Object;
+using v8::PrimitiveArray;
 using v8::Promise;
 using v8::MaybeLocal;
 using v8::Maybe;
@@ -36,7 +37,9 @@ using v8::Exception;
 using v8::TryCatch;
 using v8::Message;
 using v8::HandleScope;
+using v8::FixedArray;
+using v8::Persistent;
 
 } // namespace cattle
 
-#endif
+#endif // CATTLE_COMMON_H_

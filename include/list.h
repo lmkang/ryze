@@ -1,5 +1,5 @@
-#ifndef INCLUDE_LIST_H_
-#define INCLUDE_LIST_H_
+#ifndef CATTLE_LIST_H_
+#define CATTLE_LIST_H_
 
 #ifndef offsetof
 #define offsetof(type, member) ((size_t) &((type *) 0)->member)
@@ -74,4 +74,4 @@ static inline struct list_head *list_remove_tail(struct list_head *head) {
     return entry;
 }
 
-#endif // INCLUDE_LIST_H_
+#endif // CATTLE_LIST_H_
