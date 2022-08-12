@@ -5,15 +5,19 @@
 #define offsetof(type, member) ((size_t) &((type *) 0)->member)
 #endif
 
+#ifndef container_of
 #define container_of(ptr, type, member) ({ \
     (type *) ((char *) (ptr) - offsetof(type, member)); })
+#endif
 
+#ifndef list_entry
 #define list_entry(ptr, type, member) container_of(ptr, type, member)
+#endif
 
-#define list_first_entry(ptr, type, member) list_entry((ptr)->next, type, member)
-
+#ifndef list_for_each
 #define list_for_each(head) \
     for(struct list_head *entry = (head)->next; entry != (head); entry = entry->next)
+#endif
 
 struct list_head {
     struct list_head *next;

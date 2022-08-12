@@ -38,7 +38,7 @@ using v8::TryCatch;
 using v8::Message;
 using v8::HandleScope;
 using v8::FixedArray;
-using v8::Persistent;
+using v8::Global;
 
 } // namespace cattle
 
