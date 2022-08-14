@@ -15,3 +15,7 @@ void ev_loop_destroy(struct ev_loop_t *loop) {
     EV_LOCK_DESTROY(loop->wq_lock);
     free(loop->wq_lock);
 }
+
+int ev_fs_open(struct ev_fs_t *fs) {
+    
+}
