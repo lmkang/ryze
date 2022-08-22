@@ -7,14 +7,6 @@
 
 #define MAX_NEVENTS 1024
 
-#define EV_LOCK(mutex) pthread_mutex_lock(mutex)
-
-#define EV_UNLOCK(mutex) pthread_mutex_unlock(mutex)
-
-#define EV_WAIT(cond) pthread_cond_wait(cond)
-
-#define EV_SIGNAL(cond, mutex) pthread_cond_signal(cond, mutex)
-
 struct ev_loop_t {
     int stop;
     int epfd;

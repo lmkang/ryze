@@ -5,7 +5,6 @@ struct ev_loop_t *ev_loop_init() {
     struct ev_loop_t *loop = (struct ev_loop_t *) malloc(sizeof(struct ev_loop_t));
     loop->stop = 0;
     loop->epfd = epoll_create1(EPOLL_CLOEXEC);
-    loop->nevs = 1024;
     loop->events = (struct epoll_event *) malloc(sizeof(struct epoll_event) * MAX_NEVENTS);
     loop->efd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     struct epoll_event ev;
