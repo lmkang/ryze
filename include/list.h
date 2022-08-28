@@ -1,5 +1,5 @@
-#ifndef RYZE_LIST_H_
-#define RYZE_LIST_H_
+#ifndef RYZE_LIST_H
+#define RYZE_LIST_H
 
 #define OFFSETOF(type, member) ((size_t) &((type *) 0)->member)
 
@@ -33,4 +33,4 @@ struct list_head {
     struct list_head *next;
 };
 
-#endif // RYZE_LIST_H_
+#endif // RYZE_LIST_H

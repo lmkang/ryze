@@ -1,10 +1,8 @@
-#ifndef CATTLE_COMMON_H_
-#define CATTLE_COMMON_H_
+#ifndef RYZE_COMMON_H
+#define RYZE_COMMON_H
 
 #include "v8.h"
 #include "libplatform/libplatform.h"
-
-namespace cattle {
 
 using v8::Isolate;
 using v8::Context;
@@ -40,6 +38,4 @@ using v8::HandleScope;
 using v8::FixedArray;
 using v8::Global;
 
-} // namespace cattle
-
-#endif // CATTLE_COMMON_H_
+#endif // RYZE_COMMON_H

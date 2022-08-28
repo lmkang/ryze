@@ -1,0 +1,155 @@
+fs.access(path[, mode], callback)
+int access(const char *path, int amode);
+
+fs.appendFile(path, data[, options], callback)
+
+fs.chmod(path, mode, callback)
+int chmod(const char *path, mode_t mode);
+
+fs.chown(path, uid, gid, callback)
+int chown(const char *path, uid_t owner, gid_t group);
+
+fs.close(fd[, callback])
+int close(int fildes);
+
+fs.copyFile(src, dest[, mode], callback)
+
+fs.cp(src, dest[, options], callback)
+
+fs.createReadStream(path[, options])
+
+fs.createWriteStream(path[, options])
+
+fs.exists(path, callback)
+
+fs.fchmod(fd, mode, callback)
+int fchmod(int fildes, mode_t mode);
+
+fs.fchown(fd, uid, gid, callback)
+int fchown(int fildes, uid_t owner, gid_t group);
+
+fs.fdatasync(fd, callback)
+int fdatasync(int fildes);
+
+fs.fstat(fd[, options], callback)
+int fstat(int fildes, struct stat *buf);
+
+fs.fsync(fd, callback)
+int fsync(int fildes);
+
+fs.ftruncate(fd[, len], callback)
+int ftruncate(int fildes, off_t length);
+
+fs.futimes(fd, atime, mtime, callback)
+int futimes(int fd, const struct timeval tv[2]);
+
+fs.lchmod(path, mode, callback)
+(没找到)
+
+fs.lchown(path, uid, gid, callback)
+int lchown(const char *path, uid_t owner, gid_t group);
+
+fs.lutimes(path, atime, mtime, callback)
+int lutimes(const char *filename, const struct timeval tv[2]);
+
+fs.link(existingPath, newPath, callback)
+int link(const char *path1, const char *path2);
+
+fs.lstat(path[, options], callback)
+int lstat(const char *restrict path, struct stat *restrict buf);
+
+fs.mkdir(path[, options], callback)
+int mkdir(const char *path, mode_t mode);
+
+fs.mkdtemp(prefix[, options], callback)
+char *mkdtemp(char *template);
+
+fs.open(path[, flags[, mode]], callback)
+int open(const char *path, int oflag, ...);
+
+fs.opendir(path[, options], callback)
+DIR *opendir(const char *dirname);
+
+fs.read(fd, buffer, offset, length, position, callback)
+fs.read(fd[, options], callback)
+fs.read(fd, buffer[, options], callback)
+ssize_t read(int fildes, void *buf, size_t nbyte);
+
+fs.readdir(path[, options], callback)
+struct dirent *readdir(DIR *dirp);
+
+fs.readFile(path[, options], callback)
+
+fs.readlink(path[, options], callback)
+ssize_t readlink(const char *restrict path, char *restrict buf, size_t bufsize);
+
+fs.readv(fd, buffers[, position], callback)
+ssize_t readv(int fildes, const struct iovec *iov, int iovcnt);
+
+fs.realpath(path[, options], callback)
+char *realpath(const char *restrict file_name, char *restrict resolved_name);
+
+fs.realpath.native(path[, options], callback)
+
+fs.rename(oldPath, newPath, callback)
+int rename(const char *old, const char *new);
+
+fs.rmdir(path[, options], callback)
+int rmdir(const char *path);
+
+fs.rm(path[, options], callback)
+
+fs.stat(path[, options], callback)
+int stat(const char *restrict path, struct stat *restrict buf);
+
+fs.symlink(target, path[, type], callback)
+int symlink(const char *path1, const char *path2);
+
+fs.truncate(path[, len], callback)
+int truncate(const char *path, off_t length);
+
+fs.unlink(path, callback)
+int unlink(const char *path);
+
+fs.unwatchFile(filename[, listener])
+
+fs.utimes(path, atime, mtime, callback)
+int utimes(const char *path, const struct timeval times[2]);
+
+fs.watch(filename[, options][, listener])
+
+fs.watchFile(filename[, options], listener)
+
+fs.write(fd, buffer, offset[, length[, position]], callback)
+fs.write(fd, buffer[, options], callback)
+fs.write(fd, string[, position[, encoding]], callback)
+ssize_t write(int fildes, const void *buf, size_t nbyte);
+
+fs.writeFile(file, data[, options], callback)
+
+fs.writev(fd, buffers[, position], callback)
+ssize_t writev(int fildes, const struct iovec *iov, int iovcnt);
+
+
+union eio_fs_arg {
+    int fd;
+    void *path;
+    void *path1;
+    void *path2;
+    int amode;
+    int flag;
+    mode_t mode;
+    void *buf;
+    size_t bufsize;
+    off_t len;
+    void *ptr;
+    int count;
+    uid_t owner;
+    gid_t group;
+};
+
+union eio_fs_ret {
+    int errno;
+    ssize_t size;
+    void *ptr;
+};
