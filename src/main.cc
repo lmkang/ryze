@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     g_obj->Set(context, TO_UTF8(isolate, "fs"), fs_obj).ToChecked();
     
     Context::Scope context_scope(context);
-    Local<String> js_file = TO_UTF8(isolate,  "./js/main.js");
+    Local<String> js_file = TO_UTF8(isolate,  "/home/share/ryze/js/main.js");
     Local<PrimitiveArray> options = PrimitiveArray::New(isolate, 2);
     options->Set(isolate, 0, v8::Uint32::New(isolate, 0x135e0619));
     options->Set(isolate, 1, js_file);
@@ -323,7 +323,7 @@ void js_open(const FunctionCallbackInfo<Value> &args) {
     fs_args[1].flag = O_RDONLY;
     fs_args[2].mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     req->work = eio_open;
-    req->free = eio_req_path_free;
+    req->release = eio_req_path_free;
     
     Local<Promise::Resolver> resolver = Promise::Resolver::New(context).ToLocalChecked();
     Global<Promise::Resolver> *p = new Global<Promise::Resolver>();

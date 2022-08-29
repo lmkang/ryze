@@ -18,8 +18,8 @@
 #define EIO_REQ_END(req) (req)->ret = ret
 
 #define EIO_REQ_FREE(req) \
-    if((req)->free != NULL) { \
-        (req)->free(req); \
+    if((req)->release != NULL) { \
+        (req)->release(req); \
     } \
     if((req)->args != NULL) { \
         free((req)->args); \
@@ -68,7 +68,7 @@ struct eio_req_t {
     enum eio_ret_type ret_type;
     void *resolver;
     void (*work)(struct eio_req_t *req);
-    void (*free)(struct eio_req_t *req);
+    void (*release)(struct eio_req_t *req);
 };
 
 struct eio_req_t *eio_req_alloc(int argc, int ret);

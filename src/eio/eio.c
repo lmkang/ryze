@@ -2,6 +2,11 @@
 
 struct eio_req_t *eio_req_alloc(int argc, int ret) {
     struct eio_req_t *req = malloc(sizeof(struct eio_req_t));
+    req->args = NULL;
+    req->ret = NULL;
+    req->resolver = NULL;
+    req->work = NULL;
+    req->release = NULL;
     if(argc > 0) {
         req->argc = argc;
         req->args = malloc(sizeof(union eio_fs_arg) * argc);
