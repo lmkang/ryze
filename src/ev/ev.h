@@ -43,7 +43,7 @@ struct ev_loop_t {
 
 struct ev_loop_t *ev_loop_init();
 void ev_loop_free(struct ev_loop_t *loop);
-void ev_loop_run(struct ev_loop_t *loop, void (*callback)(struct eio_req_t *req));
+void ev_loop_run(struct ev_loop_t *loop);
 void ev_loop_stop(struct ev_loop_t *loop);
 void ev_req_add(struct ev_loop_t *loop, struct eio_req_t *req);
 

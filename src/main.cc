@@ -15,7 +15,7 @@ extern "C" {
 #define TO_UTF8(isolate, str) \
     String::NewFromUtf8(isolate, str).ToLocalChecked()
 
-void LoopCallback(struct eio_req_t *req);
+void eio_req_callback1(struct eio_req_t *req);
 MaybeLocal<Module> ResolveModuleCallback(
     Local<Context> context,
     Local<String> specifier,
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    ev_loop_run(loop, LoopCallback);
+    ev_loop_run(loop);
     ev_loop_free(loop);
     
     } // isolate_scope
@@ -123,17 +123,6 @@ int main(int argc, char **argv) {
     v8::V8::DisposePlatform();
     delete create_params.array_buffer_allocator;
     return 0;
-}
-
-void LoopCallback(struct eio_req_t *req) {
-    Isolate *isolate = Isolate::GetCurrent();
-    HandleScope handle_scope(isolate);
-    Local<Context> context = isolate->GetCurrentContext();
-    Global<Promise::Resolver> *r = (Global<Promise::Resolver> *) req->resolver;
-    auto resolver = Local<Promise::Resolver>::New(isolate, *r);
-    union eio_fs_ret *ret = (union eio_fs_ret *) req->ret;
-    auto result = resolver->Resolve(context, Integer::New(isolate, ret->err));
-    delete r;
 }
 
 MaybeLocal<Module> ResolveModuleCallback(
@@ -294,6 +283,26 @@ void ReportException(Isolate *isolate, TryCatch *try_catch) {
     }
 }
 
+// ===================================================================
+
+// return int, no arg
+void eio_req_callback1(struct eio_req_t *req) {
+    Isolate *isolate = Isolate::GetCurrent();
+    HandleScope handle_scope(isolate);
+    Local<Context> context = isolate->GetCurrentContext();
+    Global<Promise::Resolver> *r = (Global<Promise::Resolver> *) req->resolver;
+    auto resolver = Local<Promise::Resolver>::New(isolate, *r);
+    if(req->errnum) {
+        Local<Object> obj = Local<Object>::New(isolate);
+        obj->Set(context, TO_UTF8(isolate, "errno"), Integer::New(isolate, req->errnum);
+        obj->Set(context, TO_UTF8(isolate, "error"), TO_UTF8(isolate, req->errbuf));
+        resolver->Reject(context, obj);
+    } else {
+        resolver->Resolve(context, Integer::New(isolate, req->errnum));
+    }
+    delete r;
+}
+
 void js_log(const FunctionCallbackInfo<Value> &args) {
     for(int i = 0; i < args.Length(); i++) {
         String::Utf8Value str(args.GetIsolate(), args[i]);
@@ -302,26 +311,16 @@ void js_log(const FunctionCallbackInfo<Value> &args) {
     fprintf(stdout, "\n");
 }
 
-void eio_req_path_free(struct eio_req_t *req) {
-    free(((union eio_fs_arg *) req->args)[0].path);
-    printf("eio_req_path_free\n");
-}
-
 void js_open(const FunctionCallbackInfo<Value> &args) {
     Isolate *isolate = args.GetIsolate();
     HandleScope handle_scope(isolate);
     Local<Context> context = isolate->GetCurrentContext();
     
-    struct eio_req_t *req = eio_req_alloc(3, 1);
-    union eio_fs_arg *fs_args = (union eio_fs_arg *) req->args;
     String::Utf8Value str(isolate, args[0]);
     int len = str.length();
     char *path = (char *) malloc(sizeof(char) * (len + 1));
     path[len] = '\0';
     memcpy(path, *str, len);
-    fs_args[0].path = path;
-    fs_args[1].flag = O_RDONLY;
-    fs_args[2].mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     req->work = eio_open;
     req->release = eio_req_path_free;
     

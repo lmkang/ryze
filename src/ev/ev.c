@@ -78,7 +78,7 @@ void ev_loop_free(struct ev_loop_t *loop) {
     free(loop);
 }
 
-void ev_loop_run(struct ev_loop_t *loop, void (*callback)(struct eio_req_t *req)) {
+void ev_loop_run(struct ev_loop_t *loop) {
     uint64_t value;
     size_t size = sizeof(uint64_t);
     int nfds = -1;
@@ -108,7 +108,7 @@ void ev_loop_run(struct ev_loop_t *loop, void (*callback)(struct eio_req_t *req)
                     entry = loop->head[1]->next;
                     LIST_DEL(entry);
                     req = LIST_ENTRY(entry, struct eio_req_t, entry);
-                    callback(req);
+                    req->callback(req);
                     EIO_REQ_FREE(req);
                 }
             }

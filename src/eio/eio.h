@@ -50,7 +50,7 @@
 struct eio_req_t {
     struct list_head entry;
     int errnum;
-    int retlen;
+    int count;
     ssize_t size;
     char *errbuf;
     void *retbuf;
