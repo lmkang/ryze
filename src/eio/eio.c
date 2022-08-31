@@ -1,257 +1,190 @@
 #include "eio.h"
 
-struct eio_req_t *eio_req_alloc(int argc, int ret) {
-    struct eio_req_t *req = malloc(sizeof(struct eio_req_t));
-    req->args = NULL;
-    req->ret = NULL;
-    req->resolver = NULL;
-    req->work = NULL;
-    req->release = NULL;
-    if(argc > 0) {
-        req->argc = argc;
-        req->args = malloc(sizeof(union eio_fs_arg) * argc);
+struct eio_req_t *eio_access(const char *path, int amode) {
+    EIO_REQ_ALLOC();
+    if(access(path, amode)) {
+        EIO_REQ_SETERR(req);
     }
-    if(ret > 0) {
-        req->ret = malloc(sizeof(union eio_fs_ret));
-    }
+    free(path);
     return req;
 }
 
-void eio_access(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = access(args[0].path, args[1].mode1);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_chmod(const char *path, mode_t mode) {
+    EIO_REQ_ALLOC();
+    req->errnum = chmod(path, mode);
+    free(path);
+    return req;
 }
 
-void eio_chmod(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = chmod(args[0].path, args[1].mode);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_chown(const char *path, uid_t owner, gid_t group) {
+    EIO_REQ_ALLOC();
+    req->errnum = chown(path, owner, group);
+    free(path);
+    return req;
 }
 
-void eio_chown(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = chown(args[0].path, args[1].owner, args[2].group);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_close(int fd) {
+    EIO_REQ_ALLOC();
+    req->errnum = close(fd);
+    return req;
 }
 
-void eio_close(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    printf("1. eio_close: %d\n", args[0].fd);
-    ret->err = close(args[0].fd);
-    printf("2. eio_close: %d\n", ret->err);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_fchmod(int fd, mode_t mode) {
+    EIO_REQ_ALLOC();
+    req->errnum = fchmod(fd, mode);
+    return req;
 }
 
-void eio_fchmod(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = fchmod(args[0].fd, args[1].mode);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_fchown(int fd, uid_t owner, gid_t group) {
+    EIO_REQ_ALLOC();
+    req->errnum = fchown(fd, owner, group);
+    return req;
 }
 
-void eio_fchown(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = fchown(args[0].fd, args[1].owner, args[2].group);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_fdatasync(int fd) {
+    EIO_REQ_ALLOC();
+    req->errnum = fdatasync(fd);
+    return req;
 }
 
-void eio_fdatasync(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = fdatasync(args[0].fd);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_fstat(int fd, struct stat *buf) {
+    EIO_REQ_ALLOC();
+    req->errnum = fstat(fd, buf);
+    req->ptr[0] = buf;
+    return req;
 }
 
-void eio_fstat(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = fstat(args[0].fd, args[1].ptr);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_fsync(int fd) {
+    EIO_REQ_ALLOC();
+    req->errnum = fsync(fd);
+    return req;
 }
 
-void eio_fsync(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = fsync(args[0].fd);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_ftruncate(int fd, off_t length) {
+    EIO_REQ_ALLOC();
+    req->errnum = ftruncate(fd, length);
+    return req;
 }
 
-void eio_ftruncate(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = ftruncate(args[0].fd, args[1].len);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_futimes(int fd, const struct timeval tv[2]) {
+    EIO_REQ_ALLOC();
+    req->errnum = futimes(fd, tv);
+    free(tv);
+    return req;
 }
 
-void eio_futimes(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = futimes(args[0].fd, args[1].ptr);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_lchown(const char *path, uid_t owner, gid_t group) {
+    EIO_REQ_ALLOC();
+    req->errnum = lchown(path, owner, group);
+    free(path);
+    return req;
 }
 
-void eio_lchown(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = lchown(args[0].path, args[1].owner, args[2].group);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_lutimes(const char *filename, const struct timeval tv[2]) {
+    EIO_REQ_ALLOC();
+    req->errnum = lutimes(filename, tv);
+    free(filename);
+    free(tv);
+    return req;
 }
 
-void eio_lutimes(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = lutimes(args[0].path, args[1].ptr);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_link(const char *path1, const char *path2) {
+    EIO_REQ_ALLOC();
+    req->errnum = link(path1, path2);
+    free(path1);
+    free(path2);
+    return req;
 }
 
-void eio_link(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = link(args[0].path1, args[1].path2);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_lstat(const char *path, struct stat *buf) {
+    EIO_REQ_ALLOC();
+    req->errnum = lstat(path, buf);
+    req->ptr[0] = buf;
+    free(path);
+    return req;
 }
 
-void eio_lstat(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = lstat(args[0].path, args[1].ptr);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_mkdir(const char *path, mode_t mode) {
+    EIO_REQ_ALLOC();
+    req->errnum = mkdir(path, mode);
+    free(path);
+    return req;
 }
 
-void eio_mkdir(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = mkdir(args[0].path, args[1].mode);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_mkdtemp(char *template) {
+    EIO_REQ_ALLOC();
+    req->ptr[EIO_REQ_PTR_LEN - 1] = mkdtemp(template);
+    free(template);
+    return req;
 }
 
-void eio_mkdtemp(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_CHAR_PTR;
-    ret->ptr = mkdtemp(args[0].path);
-    EIO_REQ_END(req);
+struct eio_req_t *eio_open(const char *path, int flag, mode_t mode) {
+    EIO_REQ_ALLOC();
+    req->errnum = open(path, flag, mode);
+    free(path);
+    return req;
 }
 
-void eio_open(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    printf("1. eio_open: %s\n", (const char *) args[0].path);
-    if(req->argc == 3) {
-        ret->err = open(args[0].path, args[1].flag, args[2].mode);
-    } else {
-        ret->err = open(args[0].path, args[1].flag);
+struct eio_req_t *eio_opendir(const char *dirname) {
+    EIO_REQ_ALLOC();
+    req->ptr[EIO_REQ_PTR_LEN - 1] = opendir(dirname);
+    free(dirname);
+    return req;
+}
+
+struct eio_req_t *eio_read(int fd, void *buf, size_t nbyte) {
+    EIO_REQ_ALLOC();
+    req->size = read(fd, buf, nbyte);
+    req->ptr[0] = buf;
+    return req;
+}
+
+struct eio_req_t *eio_readdir(DIR *dirp) {
+    EIO_REQ_ALLOC();
+    req->ptr[EIO_REQ_PTR_LEN - 1] = readdir(dirp);
+    free(dirp);
+    return req;
+}
+
+struct eio_req_t *eio_readlink(const char *path, char *buf, size_t bufsize) {
+    EIO_REQ_ALLOC();
+    req->size = readlink(path, buf, bufsize);
+    req->ptr[0] = buf;
+    free(path);
+    return req;
+}
+
+struct eio_req_t *eio_readv(int fd, const struct iovec *iov, int iovcnt) {
+    EIO_REQ_ALLOC();
+    req->len = iovcnt;
+    req->size = readv(fd, iov, iovcnt);
+    req->ptr[0] = iov;
+    return req;
+}
+
+struct eio_req_t *eio_realpath(const char *filename, char *resolved_name) {
+    EIO_REQ_ALLOC();
+    char *ret = realpath(filename, resolved_name);
+    if(ret == NULL) {
+        req->errnum = errno;
     }
-    printf("2. eio_open: %d\n", ret->err);
-    EIO_REQ_END(req);
+    req->ptr[0] = resolved_name;
+    free(filename);
+    return req;
 }
 
-void eio_opendir(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_DIR_PTR;
-    ret->ptr = opendir(args[0].path);
-    EIO_REQ_END(req);
+int rename(const char *old_name, const char *new_name) {
+    EIO_REQ_ALLOC();
+    req->errnum = rename(old_name, new_name);
+    return req;
 }
 
-void eio_read(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_SSIZE_T;
-    ret->size = read(args[0].fd, args[1].buf, args[2].size);
-    EIO_REQ_END(req);
-}
 
-void eio_readdir(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_DIRENT_PTR;
-    ret->ptr = readdir(args[0].ptr);
-    EIO_REQ_END(req);
-}
 
-void eio_readlink(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_SSIZE_T;
-    ret->size = readlink(args[0].path, args[1].buf, args[2].size);
-    EIO_REQ_END(req);
-}
 
-void eio_readv(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_SSIZE_T;
-    ret->size = readv(args[0].fd, args[1].ptr, args[2].count);
-    EIO_REQ_END(req);
-}
 
-void eio_realpath(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_CHAR_PTR;
-    ret->ptr = realpath(args[0].path1, args[1].path2);
-    EIO_REQ_END(req);
-}
 
-void eio_rename(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = rename(args[0].path1, args[1].path2);
-    EIO_REQ_END(req);
-}
 
-void eio_rmdir(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = rmdir(args[0].path);
-    EIO_REQ_END(req);
-}
 
-void eio_stat(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = stat(args[0].path, args[1].ptr);
-    EIO_REQ_END(req);
-}
 
-void eio_symlink(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = symlink(args[0].path1, args[1].path2);
-    EIO_REQ_END(req);
-}
 
-void eio_truncate(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = truncate(args[0].path, args[1].len);
-    EIO_REQ_END(req);
-}
-
-void eio_unlink(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = unlink(args[0].path);
-    EIO_REQ_END(req);
-}
-
-void eio_utimes(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_INT;
-    ret->err = utimes(args[0].path, args[1].ptr);
-    EIO_REQ_END(req);
-}
-
-void eio_write(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_SSIZE_T;
-    ret->err = write(args[0].fd, args[1].buf, args[2].size);
-    EIO_REQ_END(req);
-}
-
-void eio_writev(struct eio_req_t *req) {
-    EIO_REQ_START(req);
-    req->ret_type = EIO_RET_SSIZE_T;
-    ret->err = writev(args[0].fd, args[1].ptr, args[2].count);
-    EIO_REQ_END(req);
-}
