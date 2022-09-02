@@ -14,7 +14,8 @@
 #include "list.h"
 
 #define EIO_REQ_ERRBUF_SIZE 128
-#define EIO_REQ_PTR_LEN 2
+#define EIO_REQ_ARG_LEN 3
+#define EIO_REQ_PTR_LEN 3
 
 #define EIO_REQ_SETERR(req) \
     (req)->errnum = errno; \
@@ -22,16 +23,12 @@
     strerror_r(errno, (req)->errbuf, EIO_REQ_ERRBUF_SIZE)
 
 #define EIO_REQ_ALLOC() \
-    struct eio_req_t *req = malloc(sizeof(struct eio_req_t)); \
+    struct eio_req_t *req = (struct eio_req_t *) malloc(sizeof(struct eio_req_t)); \
+    req->errnum = 0; \
     for(int _i = 0; _i < EIO_REQ_PTR_LEN; _i++) { \
         req->ptr[_i] = NULL; \
     } \
-    req->errnum = 0; \
-    req->errbuf = NULL; \
-    req->retbuf = NULL; \
-    req->resolver = NULL; \
-    req->work = NULL; \
-    req->callback = NULL
+    req->errbuf = NULL
 
 #define EIO_REQ_FREE(req) \
     for(int _i = 0; _i < EIO_REQ_PTR_LEN; _i++) { \
@@ -42,22 +39,39 @@
     if((req)->errbuf != NULL) { \
         free((req)->errbuf); \
     } \
-    if((req)->retbuf != NULL) { \
-        free((req)->retbuf); \
-    } \
     free(req)
+
+union eio_work_arg {
+    int fd;
+    int amode;
+    int flag;
+    int count;
+    mode_t mode;
+    uid_t owner;
+    gid_t group;
+    off_t len;
+    size_t size;
+};
+
+union eio_work_ret {
+    int fd;
+    ssize_t size;
+};
 
 struct eio_req_t {
     struct list_head entry;
-    int errnum;
-    int count;
-    ssize_t size;
-    char *errbuf;
-    void *retbuf;
+    union eio_work_arg args[EIO_REQ_ARG_LEN];
+    union eio_work_ret ret;
     void *ptr[EIO_REQ_PTR_LEN];
+    int errnum;
+    char *errbuf;
     void *resolver;
     void (*work)(struct eio_req_t *req);
     void (*callback)(struct eio_req_t *req);
 };
+
+void eio_close(struct eio_req_t *req);
+void eio_open(struct eio_req_t *req);
+void eio_read(struct eio_req_t *req);
 
 #endif // RYZE_EIO_H
