@@ -11,6 +11,6 @@ console.log('hello world!');
             console.log('errno: ', err);
         }
     } catch(e) {
-        console.log(JSON.stringify(e));
+        console.log("Error: ", JSON.stringify(e));
     }
 })();

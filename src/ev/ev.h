@@ -26,6 +26,12 @@
 
 #define EV_SIGNAL(lock) pthread_cond_signal(&(lock)->cond)
 
+#define EV_REQ_ADD(loop, req) \
+    EV_LOCK((loop)->lock[0]); \
+    LIST_ADD_TAIL((loop)->head[0], &(req)->entry); \
+    EV_SIGNAL((loop)->lock[0]); \
+    EV_UNLOCK((loop)->lock[0])
+
 struct ev_lock_t {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
@@ -45,6 +51,5 @@ struct ev_loop_t *ev_loop_init();
 void ev_loop_free(struct ev_loop_t *loop);
 void ev_loop_run(struct ev_loop_t *loop);
 void ev_loop_stop(struct ev_loop_t *loop);
-void ev_req_add(struct ev_loop_t *loop, struct eio_req_t *req);
 
 #endif // RYZE_EV_H

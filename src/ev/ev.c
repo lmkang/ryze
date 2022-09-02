@@ -121,10 +121,3 @@ void ev_loop_stop(struct ev_loop_t *loop) {
     loop->stop = 1;
     EV_UNLOCK(loop->lock[1]);
 }
-
-void ev_req_add(struct ev_loop_t *loop, struct eio_req_t *req) {
-    EV_LOCK(loop->lock[0]);
-    LIST_ADD_TAIL(loop->head[0], &req->entry);
-    EV_SIGNAL(loop->lock[0]);
-    EV_UNLOCK(loop->lock[0]);
-}

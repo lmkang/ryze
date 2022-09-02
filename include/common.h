@@ -4,6 +4,20 @@
 #include "v8.h"
 #include "libplatform/libplatform.h"
 
+#define V8_STR(isolate, str) \
+    String::NewFromUtf8(isolate, str).ToLocalChecked()
+
+#define V8_INT(isolate, value) Integer::New(isolate, value)
+
+#define V8_SET_OBJ(isolate, context, obj, name, obj2) \
+    (obj)->Set(context, V8_STR(isolate, name), obj2).ToChecked();
+
+#define V8_SET_FUNC(isolate, obj, name, func) \
+    (obj)->Set(V8_STR(isolate, name), FunctionTemplate::New(isolate, func))
+
+#define V8_SET_VALUE(isolate, obj, name, value) \
+    (obj)->Set(V8_STR(isolate, name), value)
+
 using v8::Isolate;
 using v8::Context;
 using v8::Platform;
