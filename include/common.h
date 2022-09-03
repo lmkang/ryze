@@ -4,19 +4,24 @@
 #include "v8.h"
 #include "libplatform/libplatform.h"
 
-#define V8_STR(isolate, str) \
-    String::NewFromUtf8(isolate, str).ToLocalChecked()
+#define V8_STR(isolate, str, ...) \
+    String::NewFromUtf8(isolate, str, ##__VA_ARGS__).ToLocalChecked()
+
+#define V8_LITERAL(isolate, str, ...) \
+    String::NewFromUtf8Literal(isolate, str, ##__VA_ARGS__)
 
 #define V8_INT(isolate, value) Integer::New(isolate, value)
 
 #define V8_SET_OBJ(isolate, context, obj, name, obj2) \
-    (obj)->Set(context, V8_STR(isolate, name), obj2).ToChecked();
+    (obj)->Set(context, V8_LITERAL(isolate, name, NewStringType::kInternalized), \
+        obj2).ToChecked()
 
 #define V8_SET_FUNC(isolate, obj, name, func) \
-    (obj)->Set(V8_STR(isolate, name), FunctionTemplate::New(isolate, func))
+    (obj)->Set(V8_LITERAL(isolate, name, NewStringType::kInternalized), \
+        FunctionTemplate::New(isolate, func))
 
 #define V8_SET_VALUE(isolate, obj, name, value) \
-    (obj)->Set(V8_STR(isolate, name), value)
+    (obj)->Set(V8_LITERAL(isolate, name, NewStringType::kInternalized), value)
 
 using v8::Isolate;
 using v8::Context;

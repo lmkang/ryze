@@ -5,8 +5,10 @@ console.log('hello world!');
         let fd = await fs.open('/home/share/ryze/js/file.txt');
         console.log('fd: ', fd);
         if(fd >= 0) {
-            let content = await fs.read(fd);
-            console.log('content: ', content);
+            for(let i = 0; i < 16; i++) {
+                let content = await fs.read(fd);
+                console.log(i + '. content: ', content);
+            }
             let err = await fs.close(fd);
             console.log('errno: ', err);
         }

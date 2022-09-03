@@ -9,7 +9,17 @@ static void *ev_work(void *arg) {
     while(1) {
         EV_LOCK(loop->lock[0]);
         while(LIST_EMPTY(loop->head[0])) {
+            if(++loop->wait_threads >= loop->nthreads) {
+                write(loop->efd, &value, size);
+            }
             EV_WAIT(loop->lock[0]);
+            loop->wait_threads -= 1;
+            if(loop->stop) {
+                loop->alive_threads -= 1;
+                EV_SIGNAL(loop->lock[0]);
+                EV_UNLOCK(loop->lock[0]);
+                return NULL;
+            }
         }
         entry = loop->head[0]->next;
         LIST_DEL(entry);
@@ -22,11 +32,6 @@ static void *ev_work(void *arg) {
         EV_LOCK(loop->lock[1]);
         LIST_ADD_TAIL(loop->head[1], entry);
         write(loop->efd, &value, size);
-        if(loop->stop) {
-            loop->active_threads--;
-            EV_UNLOCK(loop->lock[1]);
-            break;
-        }
         EV_UNLOCK(loop->lock[1]);
     }
     return NULL;
@@ -49,8 +54,10 @@ struct ev_loop_t *ev_loop_init() {
         loop->lock[i] = malloc(sizeof(struct ev_lock_t));
         EV_LOCK_INIT(loop->lock[i]);
     }
-    loop->active_threads = 4;
-    for(int i = 0; i < loop->active_threads; i++) {
+    loop->nthreads = 4;
+    loop->wait_threads = 0;
+    loop->alive_threads = loop->nthreads;
+    for(int i = 0; i < loop->nthreads; i++) {
         pthread_t tid;
         pthread_create(&tid, NULL, ev_work, loop);
         pthread_detach(tid);
@@ -60,12 +67,12 @@ struct ev_loop_t *ev_loop_init() {
 
 void ev_loop_free(struct ev_loop_t *loop) {
     while(1) {
-        EV_LOCK(loop->lock[1]);
-        if(loop->active_threads <= 0) {
-            EV_UNLOCK(loop->lock[1]);
+        EV_LOCK(loop->lock[0]);
+        if(loop->alive_threads <= 0) {
+            EV_UNLOCK(loop->lock[0]);
             break;
         }
-        EV_UNLOCK(loop->lock[1]);
+        EV_UNLOCK(loop->lock[0]);
     }
     close(loop->efd);
     close(loop->epfd);
@@ -82,10 +89,9 @@ void ev_loop_run(struct ev_loop_t *loop) {
     uint64_t value;
     size_t size = sizeof(uint64_t);
     int nfds = -1;
-    int stop = 0;
     struct list_head *entry;
     struct eio_req_t *req;
-    while(!stop) {
+    while(1) {
         nfds = epoll_wait(loop->epfd, loop->events, MAX_NEVENTS, -1);
         if(nfds <= 0) {
             break;
@@ -95,29 +101,15 @@ void ev_loop_run(struct ev_loop_t *loop) {
                     && loop->events[i].events & EPOLLIN) {
                 read(loop->events[i].data.fd, &value, size);
                 EV_LOCK(loop->lock[1]);
-                if(loop->stop) {
-                    stop = 1;
-                    EV_UNLOCK(loop->lock[1]);
-                    break;
-                }
-                while(1) {
-                    if(LIST_EMPTY(loop->head[1])) {
-                        EV_UNLOCK(loop->lock[1]);
-                        break;
-                    }
+                while(LIST_NOT_EMPTY(loop->head[1])) {
                     entry = loop->head[1]->next;
                     LIST_DEL(entry);
                     req = LIST_ENTRY(entry, struct eio_req_t, entry);
                     req->callback(req);
                     EIO_REQ_FREE(req);
                 }
+                EV_UNLOCK(loop->lock[1]);
             }
         }
     }
-}
-
-void ev_loop_stop(struct ev_loop_t *loop) {
-    EV_LOCK(loop->lock[1]);
-    loop->stop = 1;
-    EV_UNLOCK(loop->lock[1]);
 }

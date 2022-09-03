@@ -29,7 +29,9 @@
 #define EV_REQ_ADD(loop, req) \
     EV_LOCK((loop)->lock[0]); \
     LIST_ADD_TAIL((loop)->head[0], &(req)->entry); \
-    EV_SIGNAL((loop)->lock[0]); \
+    if(loop->wait_threads > 0) { \
+        EV_SIGNAL((loop)->lock[0]); \
+    } \
     EV_UNLOCK((loop)->lock[0])
 
 struct ev_lock_t {
@@ -41,7 +43,9 @@ struct ev_loop_t {
     int stop;
     int epfd;
     int efd;
-    int active_threads;
+    int nthreads;
+    int wait_threads;
+    int alive_threads;
     struct epoll_event *events;
     struct list_head *head[2];
     struct ev_lock_t *lock[2];
@@ -50,6 +54,5 @@ struct ev_loop_t {
 struct ev_loop_t *ev_loop_init();
 void ev_loop_free(struct ev_loop_t *loop);
 void ev_loop_run(struct ev_loop_t *loop);
-void ev_loop_stop(struct ev_loop_t *loop);
 
 #endif // RYZE_EV_H

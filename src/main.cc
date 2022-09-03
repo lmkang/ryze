@@ -105,9 +105,9 @@ int main(int argc, char **argv) {
         }
     }
     ev_loop_run(loop);
-    ev_loop_free(loop);
     
     } // isolate_scope
+    ev_loop_free(loop);
     
     isolate->Dispose();
     v8::V8::Dispose();
