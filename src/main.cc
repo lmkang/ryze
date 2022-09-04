@@ -7,6 +7,7 @@
 #include <iterator>
 #include <unordered_map>
 #include "common.h"
+#include "console.h"
 #include "fs.h"
 
 extern "C" {
@@ -25,8 +26,6 @@ void InitImportMetaObjectCallback(
 std::string NormalizePath(const std::string &path, const std::string &dir);
 MaybeLocal<String> ReadFile(Isolate *isolate, const std::string path);
 void ReportException(Isolate *isolate, TryCatch *try_catch);
-
-void js_log(const FunctionCallbackInfo<Value> &args);
 
 std::unordered_map<int, std::string> module_specifier_map;
 struct ev_loop_t *loop = NULL;
@@ -62,12 +61,7 @@ int main(int argc, char **argv) {
     context->SetAlignedPointerInEmbedderData(0, loop);
     Local<Object> g_obj = context->Global();
     // console
-    Local<Object> console_obj = ObjectTemplate::New(isolate)->NewInstance(context)
-        .ToLocalChecked();
-    console_obj->Set(context, V8_STR(isolate, "log"), Function::New(context, js_log)
-        .ToLocalChecked()).ToChecked();
-    //g_obj->Set(context, V8_STR(isolate, "console"), console_obj).ToChecked();
-    V8_SET_OBJ(isolate, context, g_obj, "console", console_obj);
+    console_init(isolate, g_obj);
     // fs
     fs_init(isolate, g_obj);
     
@@ -272,14 +266,4 @@ void ReportException(Isolate *isolate, TryCatch *try_catch) {
             fprintf(stderr, "%s\n", *stack_trace);
         }
     }
-}
-
-// ===================================================================
-
-void js_log(const FunctionCallbackInfo<Value> &args) {
-    for(int i = 0; i < args.Length(); i++) {
-        String::Utf8Value str(args.GetIsolate(), args[i]);
-        fprintf(stdout, "%s ", *str);
-    }
-    fprintf(stdout, "\n");
 }

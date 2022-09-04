@@ -13,8 +13,8 @@
 #define V8_INT(isolate, value) Integer::New(isolate, value)
 
 #define V8_SET_OBJ(isolate, context, obj, name, obj2) \
-    (obj)->Set(context, V8_LITERAL(isolate, name, NewStringType::kInternalized), \
-        obj2).ToChecked()
+    (obj)->Set(context, V8_LITERAL(isolate, name, \
+        NewStringType::kInternalized), obj2).ToChecked()
 
 #define V8_SET_FUNC(isolate, obj, name, func) \
     (obj)->Set(V8_LITERAL(isolate, name, NewStringType::kInternalized), \

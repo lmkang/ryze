@@ -136,7 +136,6 @@ void fs_read(const FunctionCallbackInfo<Value> &args) {
     req->ptr[0] = malloc(sizeof(char) * req->args[1].size);
     req->work = eio_read;
     req->callback = eio_req_fs_callback3;
-    
     Local<Promise::Resolver> resolver = Promise::Resolver::New(context).ToLocalChecked();
     Global<Promise::Resolver> *p = new Global<Promise::Resolver>();
     p->Reset(isolate, resolver);
@@ -168,7 +167,3 @@ void fs_close(const FunctionCallbackInfo<Value> &args) {
     
     args.GetReturnValue().Set(resolver->GetPromise());
 }
-
-
-
-
