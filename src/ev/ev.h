@@ -26,7 +26,7 @@
 
 #define EV_REQ_ADD(loop, req) \
     pthread_mutex_lock(&(loop)->mutex[0]); \
-    LIST_ADD_TAIL((loop)->list[0], &(req)->entry); \
+    LIST_ADD_TAIL(&(loop)->list[0], &(req)->entry); \
     if((loop)->wait_threads > 0) { \
         pthread_cond_signal(&(loop)->cond[0]); \
     } \
@@ -71,5 +71,10 @@ struct ev_loop {
     pthread_cond_t cond[2];
     struct epoll_event events[EV_MAX_EVENTS];
 };
+
+struct ev_loop *ev_loop_init(int nthreads);
+void ev_loop_destroy(struct ev_loop *loop);
+void ev_loop_run(struct ev_loop *loop, 
+    void (*callback)(struct ev_loop *loop, int fd));
 
 #endif
