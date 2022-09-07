@@ -6,6 +6,10 @@
 #define LIST_ENTRY(ptr, type, member) \
     (type *) ((char *) (ptr) - OFFSETOF(type, member))
 
+#define LIST_INIT(head) \
+    (head)->prev = (head); \
+    (head)->next = (head)
+
 #define LIST_ADD(head, entry) \
     (entry)->prev = (head); \
     (entry)->next = (head)->next; \
