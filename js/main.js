@@ -1,18 +1,3 @@
-console.log('hello world!');
+import 'http://192.168.50.181:9494/jslib/func.js';
 
-(async () => {
-    try {
-        let fd = await fs.open('/home/share/ryze/js/file.txt');
-        console.log('fd: ', fd);
-        if(fd >= 0) {
-            for(let i = 0; i < 16; i++) {
-                let content = await fs.read(fd);
-                console.log(i + '. content: ', content);
-            }
-            let err = await fs.close(fd);
-            console.log('errno: ', err);
-        }
-    } catch(e) {
-        console.log("Error: ", JSON.stringify(e));
-    }
-})();
+console.log('hello world!');

@@ -1,19 +1,8 @@
 #ifndef RYZE_EV_H
 #define RYZE_EV_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <pthread.h>
-#include <sys/stat.h>
-#include <sys/uio.h>
-#include <sys/time.h>
 #include <sys/epoll.h>
-#include <sys/eventfd.h>
 #include "list.h"
 
 #define EV_REQ_ERRBUF_SIZE 128

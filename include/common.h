@@ -7,7 +7,9 @@
 #define V8_SET_OBJ(isolate, obj, name, obj2) \
     (obj)->Set((isolate)->GetCurrentContext(), \
         String::NewFromUtf8Literal(isolate, name, \
-        NewStringType::kInternalized), obj2).ToChecked()
+        NewStringType::kInternalized), \
+        (obj2)->NewInstance((isolate)->GetCurrentContext()) \
+        .ToLocalChecked()).ToChecked()
 
 #define V8_SET_FUNC(isolate, obj, name, func) \
     (obj)->Set(String::NewFromUtf8Literal(isolate, name, \
