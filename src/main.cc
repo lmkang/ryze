@@ -9,12 +9,12 @@ int main(int argc, char **argv) {
     v8::V8::InitializeExternalStartupData(argv[0]);
     std::unique_ptr<Platform> platform = v8::platform::NewDefaultPlatform();
     v8::V8::InitializePlatform(platform.get());
-	v8::V8::Initialize();
+    v8::V8::Initialize();
     Isolate::CreateParams create_params;
     create_params.array_buffer_allocator = ArrayBuffer::Allocator::NewDefaultAllocator();
     Isolate *isolate = Isolate::New(create_params);
     isolate->SetHostInitializeImportMetaObjectCallback(import_meta_obj_callback);
-	{ // isolate_scope
+    { // isolate_scope
     
     Isolate::Scope isolate_scope(isolate);
     HandleScope handle_scope(isolate);
@@ -24,21 +24,21 @@ int main(int argc, char **argv) {
     Local<Object> g_obj = context->Global();
     console_init(isolate, g_obj);
     
-	do {
-		// init es module
-		if(argc < 2) {
-			printf("Error: can not find entry file\n");
-			break;
-		}
-		if(!esm_init(isolate, argv[1])) {
-			printf("Error: fail to init es module\n");
-			break;
-		}
-	} while(0);
+    do {
+        // init es module
+        if(argc < 2) {
+            printf("Error: can not find entry file\n");
+            break;
+        }
+        if(!esm_init(isolate, argv[1])) {
+            printf("Error: fail to init es module\n");
+            break;
+        }
+    } while(0);
     
     } // isolate_scope
-	esm_destroy();
-	isolate->Dispose();
+    esm_destroy();
+    isolate->Dispose();
     v8::V8::Dispose();
     v8::V8::DisposePlatform();
     delete create_params.array_buffer_allocator;

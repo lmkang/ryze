@@ -1,5 +1,6 @@
-src = src
 $(shell if [ ! -d "dist/" ]; then mkdir dist; fi)
+
+src = src
 dist = dist
 module_names = util console esm ev
 common_includes = -I ./include -I ./include/v8

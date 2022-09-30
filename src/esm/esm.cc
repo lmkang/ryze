@@ -22,15 +22,15 @@ MaybeLocal<Module> resolve_module_callback(
     HandleScope handle_scope(isolate);
     String::Utf8Value value(isolate, specifier);
     auto it = module_path_map.find(referer->GetIdentityHash());
-	char *dir = dirname(it->second);
+    char *dir = dirname(it->second);
     char *path = normalize_path(*value, dir);
-	free(dir);
-	char *content = NULL;
-	if(is_http_path(path)) {
-		content = http_get(path);
-	} else {
-		content = read_file(path);
-	}
+    free(dir);
+    char *content = NULL;
+    if(is_http_path(path)) {
+        content = http_get(path);
+    } else {
+        content = read_file(path);
+    }
     Local<String> text = String::NewFromUtf8(isolate, content).ToLocalChecked();
     free(content);
     Local<PrimitiveArray> opts = PrimitiveArray::New(isolate, 2);
@@ -107,37 +107,37 @@ int esm_init(Isolate *isolate, const char *file_path) {
         opts
     );
     char *content = NULL;
-	if(is_http_path(path)) {
-		content = http_get(path);
-	} else {
-		content = read_file(path);
-	}
+    if(is_http_path(path)) {
+        content = http_get(path);
+    } else {
+        content = read_file(path);
+    }
     Local<String> text = String::NewFromUtf8(isolate, content).ToLocalChecked();
     free(content);
     ScriptCompiler::Source source(text, origin);
     Local<Module> module;
     if(ScriptCompiler::CompileModule(isolate, &source).ToLocal(&module)) {
-		module_path_map.insert(std::make_pair(module->GetIdentityHash(), path));
-		if(module->InstantiateModule(context, 
-				resolve_module_callback).FromMaybe(false)) {
-			Local<Value> result;
-			if(module->Evaluate(context).ToLocal(&result)) {
-				Local<Promise> promise(result.As<Promise>());
-				while(promise->State() == Promise::kPending) {
-					// Loop until module execution finish
-				}
-				return 1;
-			}
-		}
+        module_path_map.insert(std::make_pair(module->GetIdentityHash(), path));
+        if(module->InstantiateModule(context, 
+                resolve_module_callback).FromMaybe(false)) {
+            Local<Value> result;
+            if(module->Evaluate(context).ToLocal(&result)) {
+                Local<Promise> promise(result.As<Promise>());
+                while(promise->State() == Promise::kPending) {
+                    // Loop until module execution finish
+                }
+                return 1;
+            }
+        }
     }
-	free(path);
-	return 0;
+    free(path);
+    return 0;
 }
 
 void esm_destroy() {
-	auto it = module_path_map.begin();
-	while(it != module_path_map.end()) {
-		free(it->second);
-		module_path_map.erase(it++);
-	}
+    auto it = module_path_map.begin();
+    while(it != module_path_map.end()) {
+        free(it->second);
+        module_path_map.erase(it++);
+    }
 }
