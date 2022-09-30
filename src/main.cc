@@ -34,6 +34,7 @@ int main(int argc, char **argv) {
             printf("Error: fail to init es module\n");
             break;
         }
+        // printf("V8 version: %s\n", v8::V8::GetVersion());
     } while(0);
     
     } // isolate_scope
