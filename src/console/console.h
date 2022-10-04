@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-void console_init(Isolate *isolate, Local<Object> obj);
+void console_init(Isolate *isolate);
 void console_log(const FunctionCallbackInfo<Value> &args);
 
 #endif

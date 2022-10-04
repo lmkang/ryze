@@ -6,19 +6,16 @@
 
 #define V8_SET_OBJ(isolate, obj, name, obj2) \
     (obj)->Set((isolate)->GetCurrentContext(), \
-        String::NewFromUtf8Literal(isolate, name, \
-        NewStringType::kInternalized), \
+        String::NewFromUtf8Literal(isolate, name), \
         (obj2)->NewInstance((isolate)->GetCurrentContext()) \
         .ToLocalChecked()).ToChecked()
 
 #define V8_SET_FUNC(isolate, obj, name, func) \
-    (obj)->Set(String::NewFromUtf8Literal(isolate, name, \
-        NewStringType::kInternalized), \
+    (obj)->Set(String::NewFromUtf8Literal(isolate, name), \
         FunctionTemplate::New(isolate, func))
 
 #define V8_SET_VALUE(isolate, obj, name, value) \
-    (obj)->Set(String::NewFromUtf8Literal(isolate, name, \
-        NewStringType::kInternalized), value)
+    (obj)->Set(String::NewFromUtf8Literal(isolate, name), value)
 
 using v8::Isolate;
 using v8::Context;

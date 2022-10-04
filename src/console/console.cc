@@ -1,11 +1,12 @@
 #include "console.h"
 
-void console_init(Isolate *isolate, Local<Object> obj) {
-    Local<ObjectTemplate> console = ObjectTemplate::New(isolate);
-    
-    V8_SET_FUNC(isolate, console, "log", console_log);
-    
-    V8_SET_OBJ(isolate, obj, "console", console);
+void console_init(Isolate *isolate) {
+    HandleScope handle_scope(isolate);
+    Local<Context> context = isolate->GetCurrentContext();
+    Local<Object> gobj = context->Global();
+    Local<ObjectTemplate> obj_tmpl = ObjectTemplate::New(isolate);
+    V8_SET_FUNC(isolate, obj_tmpl, "log", console_log);
+    V8_SET_OBJ(isolate, gobj, "console", obj_tmpl);
 }
 
 void console_log(const FunctionCallbackInfo<Value> &args) {
