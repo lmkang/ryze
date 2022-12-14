@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     Context::Scope context_scope(context);
     // context->SetAlignedPointerInEmbedderData(0, loop);
     Local<Object> g_obj = context->Global();
-    console_init(isolate, g_obj);
+    console_init(isolate);
     
     do {
         // init es module
