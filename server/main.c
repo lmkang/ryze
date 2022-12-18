@@ -10,23 +10,35 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 
-#define MAX_EVENTS 256
+#define MAX_EVENTS 128
 #define PORT 9797
 
-int set_nonblock(int fd) {
-    int flag = fcntl(fd, F_GETFL);
-    flag = flag | O_NONBLOCK;
-    return fcntl(fd, F_SETFL, flag);
-}
+struct ev_request_buf {
+    char *buf;
+    size_t offset;
+    size_t length;
+    struct ev_request_buf *next;
+};
+
+struct ev_request_data {
+    int fd;
+    struct ev_request_buf *head;
+};
+
+int set_nonblock(int fd);
+char *read_file(const char *path);
 
 int main(int argc, char **argv) {
     int index;
-    for(index = 0; index < 4; index++) {
+    for(index = 0; index < 1; index++) {
         int pid = fork();
         if(pid == 0) {
+            // child code
             break;
-        } else {
+        } else if(pid > 0) {
             // TODO: father code
+        } else {
+            // TODO: error
         }
     }
     if(index >= 4) {
@@ -83,30 +95,60 @@ int main(int argc, char **argv) {
                 }
             } else if(events[i].events & EPOLLIN) {
                 char buf[1024];
-                int n = 0;
-                int nread;
-                while((nread = read(fd, buf, 1024)) > 0) {
-                    n += nread;
-                }
-                if(n == 0 || (nread == -1 && errno != EAGAIN)) {
+                int n = read(fd, buf, 1024);
+                if(n == -1 && errno != EAGAIN) {
                     printf("read error\n");
                     close(fd);
                 } else {
-                    ev.data.fd = fd;
-                    ev.events = events[i].events | EPOLLOUT;
-                    epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
+                    if(n > 0) {
+                        ev.data.fd = fd;
+                        ev.events = EPOLLOUT | EPOLLET;
+                        epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
+                    } else {
+                        close(fd);
+                    }
                 }
             } else if(events[i].events & EPOLLOUT) {
+                char *content = read_file("./test.txt");
+                size_t len = strlen(content);
                 const char *fmt = "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s";
-                const char *content = "hello world!";
-                char buf[64];
-                sprintf(buf, fmt, strlen(content), content);
-                write(fd, buf, strlen(buf));
-                close(fd);
+                char *buf = malloc(len + strlen(fmt) + 1);
+                sprintf(buf, fmt, len, content);
+                free(content);
+                len = strlen(buf);
+                int n = write(fd, buf, len);
+                free(buf);
+                if(n == len) {
+                    close(fd);
+                } else {
+                    
+                }
             }
         }
     }
     free(events);
     close(epfd);
     return 0;
+}
+
+int set_nonblock(int fd) {
+    int flag = fcntl(fd, F_GETFL);
+    flag = flag | O_NONBLOCK;
+    return fcntl(fd, F_SETFL, flag);
+}
+
+char *read_file(const char *path) {
+    int fd = open(path, O_RDONLY);
+    if(fd < 0) {
+        printf("Error: Can not open file %s\n", path);
+        return NULL;
+    }
+    struct stat st;
+    fstat(fd, &st);
+    off_t size = st.st_size;
+    char *buf = malloc(size + 1);
+    read(fd, buf, size);
+    buf[size] = '\0';
+    close(fd);
+    return buf;
 }
