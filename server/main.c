@@ -116,13 +116,20 @@ int main(int argc, char **argv) {
                 sprintf(buf, fmt, len, content);
                 free(content);
                 len = strlen(buf);
-                int n = write(fd, buf, len);
-                free(buf);
-                if(n == len) {
-                    close(fd);
-                } else {
-                    
+                int n = 0;
+                int nwrite;
+                while(1) {
+                    if(n == len) {
+                        break;
+                    }
+                    nwrite = write(fd, buf + n, len - n);
+                    if(nwrite > 0) {
+                        n += nwrite;
+                    }
+                    usleep(1000);
                 }
+                free(buf);
+                close(fd);
             }
         }
     }
