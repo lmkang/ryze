@@ -13,20 +13,59 @@
 #define MAX_EVENTS 128
 #define PORT 9797
 
-struct ev_request_buf {
-    char *buf;
-    size_t offset;
-    size_t length;
-    struct ev_request_buf *next;
+#define OFFSETOF(type, member) ((size_t) &((type *) 0)->member)
+
+#define LIST_ENTRY(ptr, type, member) \
+    (type *) ((char *) (ptr) - OFFSETOF(type, member))
+
+#define LIST_INIT(head) \
+    (head)->prev = (head); \
+    (head)->next = (head)
+
+#define LIST_ADD(head, entry) \
+    (entry)->prev = (head); \
+    (entry)->next = (head)->next; \
+    (head)->next->prev = (entry); \
+    (head)->next = (entry)
+
+#define LIST_ADD_TAIL(head, entry) \
+    (entry)->prev = (head)->prev; \
+    (entry)->next = (head); \
+    (head)->prev->next = (entry); \
+    (head)->prev = (entry)
+
+#define LIST_DEL(entry) \
+    (entry)->prev->next = (entry)->next; \
+    (entry)->next->prev = (entry)->prev; \
+    (entry)->prev = NULL; \
+    (entry)->next = NULL
+
+#define LIST_EMPTY(head) ((head)->next == (head))
+
+struct list_head {
+    struct list_head *prev;
+    struct list_head *next;
 };
 
-struct ev_request_data {
+struct ev_rwbuf {
+    struct list_head entry;
+    ssize_t offset;
+    ssize_t length;
+    char *data;
+};
+
+struct ev_request {
+    struct list_head list;
     int fd;
-    struct ev_request_buf *head;
+    void (*on_read)(struct ev_request *req);
+    void (*on_write)(struct ev_request *req);
 };
 
 int set_nonblock(int fd);
 char *read_file(const char *path);
+void http_response_write(struct ev_request *req);
+void http_on_read(struct ev_request *req);
+void http_on_write(struct ev_request *req);
 
 int main(int argc, char **argv) {
     int index;
@@ -57,9 +96,11 @@ int main(int argc, char **argv) {
     bind(listenfd, (struct sockaddr *) &local_addr, sizeof(local_addr));
     listen(listenfd, 128);
     int epfd = epoll_create1(EPOLL_CLOEXEC);
+    struct ev_request *ev_req = malloc(sizeof(struct ev_request));
+    ev_req->fd = listenfd;
     struct epoll_event ev;
     ev.events = EPOLLIN;
-    ev.data.fd = listenfd;
+    ev.data.ptr = ev_req;
     epoll_ctl(epfd, EPOLL_CTL_ADD, listenfd, &ev);
     struct epoll_event *events = malloc(sizeof(struct epoll_event) * MAX_EVENTS);
     while(1) {
@@ -69,7 +110,8 @@ int main(int argc, char **argv) {
             break;
         }
         for(int i = 0; i < nfds; i++) {
-            int fd = events[i].data.fd;
+            ev_req = events[i].data.ptr;
+            int fd = ev_req->fd;
             if(events[i].events & EPOLLERR 
                 || events[i].events & EPOLLHUP
                 || (!events[i].events & EPOLLIN)) {
@@ -82,8 +124,13 @@ int main(int argc, char **argv) {
                 socklen_t addrlen;
                 while((connfd = accept(listenfd, (struct sockaddr *) &addr, &addrlen)) > 0) {
                     set_nonblock(connfd);
+                    struct ev_request *req = malloc(sizeof(struct ev_request));
+                    LIST_INIT(&req->list);
+                    req->fd = connfd;
+                    req->on_read = http_on_read;
+                    req->on_write = http_on_write;
                     ev.events = EPOLLIN | EPOLLET;
-                    ev.data.fd = connfd;
+                    ev.data.ptr = req;
                     epoll_ctl(epfd, EPOLL_CTL_ADD, connfd, &ev);
                 }
                 if(connfd == -1 
@@ -94,14 +141,15 @@ int main(int argc, char **argv) {
                     printf("accept error\n");
                 }
             } else if(events[i].events & EPOLLIN) {
-                char buf[1024];
-                int n = read(fd, buf, 1024);
+                char tmp[1024];
+                int n = read(fd, tmp, 1024);
                 if(n == -1 && errno != EAGAIN) {
                     printf("read error\n");
                     close(fd);
                 } else {
                     if(n > 0) {
-                        ev.data.fd = fd;
+                        http_response_write(ev_req);
+                        ev.data.ptr = ev_req;
                         ev.events = EPOLLOUT | EPOLLET;
                         epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
                     } else {
@@ -109,27 +157,7 @@ int main(int argc, char **argv) {
                     }
                 }
             } else if(events[i].events & EPOLLOUT) {
-                char *content = read_file("./test.txt");
-                size_t len = strlen(content);
-                const char *fmt = "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s";
-                char *buf = malloc(len + strlen(fmt) + 1);
-                sprintf(buf, fmt, len, content);
-                free(content);
-                len = strlen(buf);
-                int n = 0;
-                int nwrite;
-                while(1) {
-                    if(n == len) {
-                        break;
-                    }
-                    nwrite = write(fd, buf + n, len - n);
-                    if(nwrite > 0) {
-                        n += nwrite;
-                    }
-                    usleep(1000);
-                }
-                free(buf);
-                close(fd);
+                ev_req->on_write(ev_req);
             }
         }
     }
@@ -158,4 +186,51 @@ char *read_file(const char *path) {
     buf[size] = '\0';
     close(fd);
     return buf;
+}
+
+void http_response_write(struct ev_request *req) {
+    char *content = read_file("./test.txt");
+    size_t len = strlen(content);
+    const char *fmt = "HTTP/1.1 200 OK\r\n\r\n\r\n%s";
+    char *buf = malloc(len + strlen(fmt));
+    sprintf(buf, fmt, content);
+    free(content);
+    len = strlen(buf);
+    struct ev_rwbuf *rwbuf = malloc(sizeof(struct ev_rwbuf));
+    rwbuf->offset = 0;
+    rwbuf->length = len;
+    rwbuf->data = buf;
+    LIST_ADD_TAIL(&req->list, &rwbuf->entry);
+}
+
+void http_on_read(struct ev_request *req) {
+    // TODO
+}
+
+void http_on_write(struct ev_request *req) {
+    while(!LIST_EMPTY(&req->list)) {
+        struct list_head *entry = req->list.next;
+        struct ev_rwbuf *rwbuf = LIST_ENTRY(entry, struct ev_rwbuf, entry);
+        int is_full = 0;
+        while(rwbuf->offset < rwbuf->length - 1) {
+            ssize_t n = write(req->fd, rwbuf->data + rwbuf->offset, rwbuf->length - rwbuf->offset);
+            if(n > 0) {
+                rwbuf->offset += n;
+            } else {
+                is_full = 1;
+                break;
+            }
+        }
+        if(!is_full) {
+            LIST_DEL(entry);
+            free(rwbuf->data);
+            free(rwbuf);
+        } else {
+            break;
+        }
+    }
+    if(LIST_EMPTY(&req->list)) {
+        close(req->fd);
+        free(req);
+    }
 }
