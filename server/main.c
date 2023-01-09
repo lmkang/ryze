@@ -63,7 +63,7 @@ struct ev_request {
 
 int set_nonblock(int fd);
 char *read_file(const char *path);
-void http_response_write(struct ev_request *req);
+void http_response_write(struct ev_request *req, char *buf, size_t len);
 void http_on_read(struct ev_request *req);
 void http_on_write(struct ev_request *req);
 
@@ -141,21 +141,7 @@ int main(int argc, char **argv) {
                     printf("accept error\n");
                 }
             } else if(events[i].events & EPOLLIN) {
-                char tmp[1024];
-                int n = read(fd, tmp, 1024);
-                if(n == -1 && errno != EAGAIN) {
-                    printf("read error\n");
-                    close(fd);
-                } else {
-                    if(n > 0) {
-                        http_response_write(ev_req);
-                        ev.data.ptr = ev_req;
-                        ev.events = EPOLLOUT | EPOLLET;
-                        epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
-                    } else {
-                        close(fd);
-                    }
-                }
+                ev_req->on_read(ev_req);
             } else if(events[i].events & EPOLLOUT) {
                 ev_req->on_write(ev_req);
             }
@@ -188,14 +174,7 @@ char *read_file(const char *path) {
     return buf;
 }
 
-void http_response_write(struct ev_request *req) {
-    char *content = read_file("./test.txt");
-    size_t len = strlen(content);
-    const char *fmt = "HTTP/1.1 200 OK\r\n\r\n\r\n%s";
-    char *buf = malloc(len + strlen(fmt));
-    sprintf(buf, fmt, content);
-    free(content);
-    len = strlen(buf);
+void http_response_write(struct ev_request *req, char *buf, size_t len) {
     struct ev_rwbuf *rwbuf = malloc(sizeof(struct ev_rwbuf));
     rwbuf->offset = 0;
     rwbuf->length = len;
@@ -204,7 +183,32 @@ void http_response_write(struct ev_request *req) {
 }
 
 void http_on_read(struct ev_request *req) {
-    // TODO
+    if(LIST_EMPTY()) {
+        
+    }
+    char *req_data = malloc(4096);
+    
+    char tmp[1024];
+    int n = read(fd, tmp, 1024);
+    if(n == -1 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+        printf("read error\n");
+        close(fd);
+    } else {
+        if(n > 0) {
+            char *content = read_file("./test.txt");
+            size_t len = strlen(content);
+            const char *fmt = "HTTP/1.1 200 OK\r\n\r\n\r\n%s";
+            char *buf = malloc(len + strlen(fmt));
+            sprintf(buf, fmt, content);
+            free(content);
+            http_response_write(req, buf, strlen(buf));
+            ev.data.ptr = ev_req;
+            ev.events = EPOLLOUT | EPOLLET;
+            epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
+        } else {
+            close(fd);
+        }
+    }
 }
 
 void http_on_write(struct ev_request *req) {
