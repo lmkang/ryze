@@ -2,13 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum http_constant {
-    kNone,
-    kKeepAlive,
-    kClose,
-    kChunked
-};
-
 struct http_request_line {
     char *method;
     size_t method_len;
@@ -25,7 +18,7 @@ struct http_header {
     size_t value_len;
 };
 
-struct http_header_info {
+struct http_resolved_header {
     size_t content_length;
     int transfer_encoding;
     int connection;
@@ -37,14 +30,15 @@ static int http_strcmp_ignore(const char *data, size_t data_len,
         return 0;
     }
     int ret = 1;
-    int diff;
+    int d1, d2, d3;
     for(size_t i = 0; i < data_len; i++) {
-        diff = data[i] - value[i];
+        d1 = data[i] - value[i];
         if(diff == 0) {
             continue;
         }
-        if(((data[i] >= 'a' && data[i] <= 'z') || (data[i] >= 'z' && data[i] <= 'Z'))
-            && (diff == 32 || diff == -32)) {
+        d2 = data[i] - 'a';
+        d3 = data[i] - 'A';
+        if(d2 >= 0 && d2 <= 25 || d3 >= 0 && d3 <= 25) {
             continue;
         }
         ret = 0;
@@ -149,6 +143,7 @@ int http_parse_header(const char *data, size_t data_len,
                 *read_len += 2;
                 return 0;
             }
+            i++;
         }
     }
     return 1;
@@ -157,19 +152,6 @@ int http_parse_header(const char *data, size_t data_len,
 int http_parse_body(const char *data, size_t data_len, 
         size_t content_len, int is_chunked, size_t *read_len) {
     return 0;
-}
-
-int http_is_chunked(struct http_header_info *header_info) {
-    return header_info->transfer_encoding == kChunked;
-}
-
-int http_is_keep_alive(struct http_request_line *request_line, 
-        struct http_header_info *header_info) {
-    if(http_strcmp_ignore(request_line->version, 
-        request_line->version_len, "1.0", 3)) {
-        return 0;
-    }
-    return header_info->connection == kKeepAlive;
 }
 
 int main(int argc, char **argv) {
