@@ -2,14 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct http_request_line {
-    char *method;
-    size_t method_len;
-    char *path;
-    size_t path_len;
-    int minor_version;
-};
-
 struct http_header {
     char *name;
     size_t name_len;
@@ -45,32 +37,30 @@ static int str_parse_int(const char *data, size_t data_len, int radix, size_t *r
 }
 
 int http_parse_request_line(const char *data, size_t data_len, 
-        struct http_request_line *request_line, size_t *read_len) {
+        char **method, size_t *method_len, char **path, size_t *path_len, 
+        int *minor_version, size_t *read_len) {
     *read_len = 0;
     char *pos[3];
     int j = 0;
     for(size_t i = 0; i < data_len && j < 3; i++) {
-        if(data[i] == ' ' || data[i] == '\r') {
+        if(data[i] == ' ' || (data[i] == '\r' && i + 1 < data_len && data[i + 1] == '\n')) {
             pos[j++] = (char *) data + i;
         }
     }
     if(j == 3) {
-        if(pos[2] - data + 1 == data_len) {
-            return 1;
-        }
-        if(*(pos[2] + 1) != '\n' || pos[2] - pos[1] != 9) {
+        if(pos[2] - pos[1] != 9) {
             return -1;
         }
         char *p = pos[1];
-        if(*++p != 'H' || *++p != 'T' || *++p != 'T' || *++p != 'P' 
-                || *++p != '/' || *++p != '1' || *++p != '.') {
+        if(p[1] != 'H' || p[2] != 'T' || p[3] != 'T' || p[4] != 'P' 
+                || p[5] != '/' || p[6] != '1' || p[7] != '.') {
             return -1;
         }
-        request_line->method = (char *) data;
-        request_line->method_len = pos[0] - request_line->method;
-        request_line->path = pos[0] + 1;
-        request_line->path_len = pos[1] - request_line->path;
-        request_line->minor_version = *(pos[1] + 8) - '0';
+        *method = (char *) data;
+        *method_len = pos[0] - *method;
+        *path = pos[0] + 1;
+        *path_len = pos[1] - *path;
+        *minor_version = *(pos[1] + 8) - '0';
         *read_len = pos[2] + 1 - data + 1;
         return 0;
     }
@@ -82,27 +72,35 @@ int http_parse_header(const char *data, size_t data_len,
         size_t *nheader, size_t *read_len) {
     *nheader = 0;
     *read_len = 0;
-    char *p1 = (char *) data, *p2 = NULL, *p3 = NULL, *p4 = NULL;
     struct http_header *h;
+    char *p, *p1 = (char *) data, *p2 = NULL;
     for(size_t i = 0, j = 0; i < data_len; i++) {
-        if(j == max_header) {
-            return 2;
-        }
         if(data[i] == ':') {
             p2 = (char *) data + i;
-        } else if(p2 != NULL && p3 == NULL && data[i] != ' ' && data[i] != '\t') {
-            p3 = (char *) data + i;
         } else if(data[i] == '\r' && i + 1 < data_len && data[i + 1] == '\n') {
-            if(p2 != NULL && p3 != NULL && p4 != NULL) {
-                h = &headers[j];
-                h->name = p1;
-                h->name_len = p2 - p1;
-                h->value = p3;
-                h->value_len = p4 + 1 - p3;
-                *nheader = ++j;
-            } else if((*p1 == ' ' || *p1 == '\t') && j > 0) {
-                // line folding, skip SP and HT, concat value
-                char *p = p1 + 1;
+            if(p1[0] != ' ' && p1[0] != '\t') {
+                if(p2 != NULL) {
+                    if(j == max_header) {
+                        return 2;
+                    }
+                    h = &headers[j];
+                    h->name = p1;
+                    h->name_len = p2 - p1;
+                    p = p2 + 1;
+                    while(*p == ' ' || *p == '\t') {
+                        p++;
+                    }
+                    h->value = p;
+                    p = (char *) data + i - 1;
+                    while(*p == ' ' || *p == '\t') {
+                        p--;
+                    }
+                    h->value_len = p + 1 - h->value;
+                    *nheader = ++j;
+                }
+            } else if(j > 0) {
+                // line folding
+                p = p1 + 1;
                 while(*p == ' ' || *p == '\t') {
                     p++;
                 }
@@ -120,39 +118,70 @@ int http_parse_header(const char *data, size_t data_len,
             *read_len = i + 2;
             p1 = (char *) data + i + 2;
             p2 = NULL;
-            p3 = NULL;
-            p4 = NULL;
             i++;
-        } else if(p3 != NULL && data[i] != ' ' && data[i] != '\t') {
-            p4 = (char *) data + i;
         }
     }
     return 1;
 }
 
-int http_parse_chunked(const char *data, size_t data_len, size_t *read_len) {
+int http_parse_chunked(const char *data, size_t data_len, 
+        char **buf, size_t *buf_len, size_t *read_len) {
+    *buf = (char *) data;
+    *buf_len = 0;
+    *read_len = 0;
+    char *p1 = (char *) data, *p2 = NULL, *p3;
+    size_t n;
+    for(size_t i = 0; i < data_len; i++) {
+        // chunk-extension
+        if(data[i] == ';') {
+            p2 = (char *) data + i;
+        } else if(data[i] == '\r') {
+            p3 = (char *) (p2 == NULL ? data + i : p2);
+            if(str_parse_int(p1, p3 - p1, 16, &n) == 0) {
+                if(i + 1 + n + 2 < data_len) {
+                    if(n > 0) {
+                        memmove(*buf + *buf_len, data + i + 2, n);
+                        *buf_len += n;
+                        *read_len = i + 2 + n + 2;
+                    } else {
+                        break;
+                    }
+                    p1 = (char *) data + i + 2 + n + 2;
+                    p2 = NULL;
+                    i += 1 + n + 2;
+                } else {
+                    return 1;
+                }
+            } else {
+                return -1;
+            }
+        }
+    }
     return 0;
 }
 
 int main(int argc, char **argv) {
     char *data = malloc(4096);
-    strcpy(data, "POST /aa/bb/cc HTTP/1.1\r\nContent-Length: 1234\r\nX-Test11: aa\r\n bb\r\nX-Test22: cc, dd, ee \r\n\r\nhello world");
+    strcpy(data, "POST /aa/bb/cc HTTP/1.1\r\nContent-Length: 1234\r\nX-Test11: aa\r\n bb\r\nX-Test22: cc, dd, ee \r\n\r\n1\r\na\r\n2;name=value\r\nbb\r\n3\r\nccc\r\nd\r\n, hello world\r\n0\r\n\r\n");
     size_t data_len = strlen(data);
-    struct http_request_line *request_line = malloc(sizeof(struct http_request_line));
-    size_t read_len = 0;
-    int ret = http_parse_request_line(data, data_len, request_line, &read_len);
+    char *method, *path;
+    int minor_version;
+    size_t method_len, path_len, read_len = 0;
+    int ret = http_parse_request_line(data, data_len, &method, &method_len, 
+        &path, &path_len, &minor_version, &read_len);
     if(ret == 0) {
-        printf("method: %.*s\n", request_line->method_len, request_line->method);
-        printf("path: %.*s\n", request_line->path_len, request_line->path);
-        printf("minor version: %d\n", request_line->minor_version);
+        printf("method: %.*s\n", method_len, method);
+        printf("path: %.*s\n", path_len, path);
+        printf("minor version: %d\n", minor_version);
         
         size_t max_header = 64;
         struct http_header *headers = malloc(sizeof(struct http_header) * max_header);
         size_t nheader = 0;
-        size_t read_len2 = 0;
+        size_t len = 0;
         ret = http_parse_header(data + read_len, data_len - read_len, 
-            headers, max_header, &nheader, &read_len2);
+            headers, max_header, &nheader, &len);
         if(ret == 0) {
+            read_len += len;
             printf("num of header: %d\n", nheader);
             printf("headers : \n");
             for(int i = 0; i < nheader; i++) {
@@ -160,12 +189,23 @@ int main(int argc, char **argv) {
                     headers[i].name_len, headers[i].name, 
                     headers[i].value_len, headers[i].value);
             }
+            
+            char *buf;
+            size_t buf_len;
+            ret = http_parse_chunked(data + read_len, data_len - read_len, 
+                &buf, &buf_len, &len);
+            if(ret == 0) {
+                printf("body: %.*s\n", buf_len, buf);
+            } else {
+                printf("fail to parse chunked: %d\n", ret);
+            }
         } else {
             printf("fail to parse header: %d\n", ret);
         }
         free(headers);
+    } else {
+        printf("fail to parse request line: %d\n", ret);
     }
-    free(request_line);
     free(data);
     return 0;
 }
