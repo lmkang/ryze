@@ -10,42 +10,13 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 
-#define MAX_EVENTS 1024
+#include "list.h"
+#include "http_parser.h"
+
+#define MAX_EVENT_SIZE 1024
 #define PORT 9797
-
-#define OFFSETOF(type, member) ((size_t) &((type *) 0)->member)
-
-#define LIST_ENTRY(ptr, type, member) \
-    (type *) ((char *) (ptr) - OFFSETOF(type, member))
-
-#define LIST_INIT(head) \
-    (head)->prev = (head); \
-    (head)->next = (head)
-
-#define LIST_ADD(head, entry) \
-    (entry)->prev = (head); \
-    (entry)->next = (head)->next; \
-    (head)->next->prev = (entry); \
-    (head)->next = (entry)
-
-#define LIST_ADD_TAIL(head, entry) \
-    (entry)->prev = (head)->prev; \
-    (entry)->next = (head); \
-    (head)->prev->next = (entry); \
-    (head)->prev = (entry)
-
-#define LIST_DEL(entry) \
-    (entry)->prev->next = (entry)->next; \
-    (entry)->next->prev = (entry)->prev; \
-    (entry)->prev = NULL; \
-    (entry)->next = NULL
-
-#define LIST_EMPTY(head) ((head)->next == (head))
-
-struct list_head {
-    struct list_head *prev;
-    struct list_head *next;
-};
+#define BACKLOG_SIZE 511
+#define HEADER_SIZE 4096
 
 struct ev_buffer {
     struct list_head entry;
@@ -62,33 +33,14 @@ struct ev_request {
     void (*on_write)(int fd, struct list_head *snd_list);
 };
 
-struct http_request_line {
-    char *method;
-    size_t method_len;
-    char *path;
-    size_t path_len;
-    char *version;
-    size_t version_len;
-};
-
-struct http_header {
-    char *name;
-    size_t name_len;
-    char *value;
-    size_t value_len;
-};
-
 int set_nonblock(int fd);
 char *read_file(const char *path);
 void http_res_write(struct list_head *snd_list, char *data, size_t len);
 void http_on_read(int fd, struct list_head *rcv_list);
 void http_on_write(int fd, struct list_head *snd_list);
 
-size_t http_parse_request_line(char *data, size_t data_len, 
-    struct http_request_line *request_line, int *ret);
-
 int main(int argc, char **argv) {
-    /*int index;
+    int index;
     for(index = 0; index < 1; index++) {
         int pid = fork();
         if(pid == 0) {
@@ -100,7 +52,7 @@ int main(int argc, char **argv) {
             // TODO: error
         }
     }
-    if(index >= 4) {
+    if(index >= 1) {
         return 0;
     }
     int listenfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -114,7 +66,7 @@ int main(int argc, char **argv) {
     local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     local_addr.sin_port = htons(PORT);
     bind(listenfd, (struct sockaddr *) &local_addr, sizeof(local_addr));
-    listen(listenfd, 511);
+    listen(listenfd, BACKLOG_SIZE);
     int epfd = epoll_create1(EPOLL_CLOEXEC);
     struct ev_request *ev_req = malloc(sizeof(struct ev_request));
     ev_req->fd = listenfd;
@@ -122,9 +74,9 @@ int main(int argc, char **argv) {
     ev.events = EPOLLIN;
     ev.data.ptr = ev_req;
     epoll_ctl(epfd, EPOLL_CTL_ADD, listenfd, &ev);
-    struct epoll_event *events = malloc(sizeof(struct epoll_event) * MAX_EVENTS);
+    struct epoll_event *events = malloc(sizeof(struct epoll_event) * MAX_EVENT_SIZE);
     while(1) {
-        int nfds = epoll_wait(epfd, events, MAX_EVENTS, -1);
+        int nfds = epoll_wait(epfd, events, MAX_EVENT_SIZE, -1);
         if(nfds < 0) {
             printf("epoll wait error\n");
             break;
@@ -168,16 +120,7 @@ int main(int argc, char **argv) {
         }
     }
     free(events);
-    close(epfd);*/
-    
-    const char *data = "GET /aa/bb/cc HTTP/1.1\r\n";
-    struct http_request_line *request_line = malloc(sizeof(struct http_request_line));
-    request_line->method_len = 0;
-    request_line->path_len = 0;
-    request_line->version_len = 0;
-    int ret = 0;
-    size_t len = http_parse_request_line(data, strlen(data), request_line, &ret);
-    
+    close(epfd);
     return 0;
 }
 
@@ -212,12 +155,11 @@ void http_res_write(struct list_head *snd_list, char *data, size_t len) {
 }
 
 void http_on_read(int fd, struct list_head *rcv_list) {
-    /*size_t max_len = 4096;
     char *data = NULL;
     ssize_t len = -1;
     while(1) {
-        data = malloc(max_len);
-        len = read(fd, data, max_len);
+        data = malloc(HEADER_SIZE);
+        len = read(fd, data, HEADER_SIZE);
         if(len > 0) {
             
         } else {
@@ -256,11 +198,11 @@ void http_on_read(int fd, struct list_head *rcv_list) {
         } else {
             close(fd);
         }
-    }*/
+    }
 }
 
 void http_on_write(int fd, struct list_head *snd_list) {
-    /*while(!LIST_EMPTY(&req->list)) {
+    while(!LIST_EMPTY(&req->list)) {
         struct list_head *entry = req->list.next;
         struct ev_rwbuf *rwbuf = LIST_ENTRY(entry, struct ev_rwbuf, entry);
         int is_full = 0;
@@ -284,79 +226,5 @@ void http_on_write(int fd, struct list_head *snd_list) {
     if(LIST_EMPTY(&req->list)) {
         close(req->fd);
         free(req);
-    }*/
-}
-
-static char *http_parse_token(char *data, size_t data_len, 
-        char **token, size_t *token_len, char next_char) {
-    char *next = data;
-    char *end = data + data_len;
-    while(next != end) {
-        if(*next == next_char) {
-            break;
-        }
-        next++;
     }
-    if(next != end) {
-        *token = data;
-        *token_len = next - data;
-    } else {
-        *token_len = 0;
-        return NULL;
-    }
-    return next;
-}
-
-size_t http_parse_request_line(char *data, size_t data_len, 
-        struct http_request_line *request_line, int *ret) {
-    *ret = 0;
-    char *end = data + data_len;
-    size_t read_len = 0;
-    char *token = NULL;
-    size_t token_len = 0;
-    char *next = NULL;
-    // method
-    if(request_line->method_len == 0) {
-        next = http_parse_token(data, data_len, &token, &token_len, ' ');
-        if(next == NULL) {
-            *ret = 1;
-            return read_len;
-        }
-        read_len = next - data;
-        request_line->method = token;
-        request_line->method_len = token_len;
-    }
-    // path
-    if(request_line->path_len == 0) {
-        if(end - next < 3) {
-            *ret = 1;
-            return read_len;
-        }
-        next++;
-        next = http_parse_token(next, data_len - (next - data), &token, &token_len, ' ');
-        if(next == NULL) {
-            *ret = 1;
-            return read_len;
-        }
-        read_len = next - data;
-        request_line->path = token;
-        request_line->path_len = token_len;
-    }
-    // version
-    if(request_line->version_len == 0) {
-        if(end - next < 11) {
-            *ret = 1;
-            return read_len;
-        }
-        next++;
-        next = http_parse_token(next, data_len - (next - data), &token, &token_len, '\r');
-        if(next == NULL || *(next + 1) != '\n') {
-            *ret = -1;
-            return read_len;
-        }
-        read_len = next - data + 1;
-        request_line->version = token + 5;
-        request_line->path_len = token_len - 5;
-    }
-    return read_len;
 }
