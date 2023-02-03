@@ -17,31 +17,27 @@ static const char *token_char_map =
     "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
     "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
-static int str_parse_int(const char *data, size_t data_len, int radix, size_t *result) {
+static int str_parse_hex(const char *data, int data_len, size_t *result) {
+    if(data_len <= 0) {
+        return -1;
+    }
     *result = 0;
-    int ret = 0;
-    size_t base = 1;
-    size_t i = data_len - 1;
+    size_t base = 0;
     int n = 0;
-    while(i >= 0) {
+    for(int i = data_len - 1; i >= 0; i--) {
         if(data[i] >= '0' && data[i] <= '9') {
             n = data[i] - '0';
-        } else if(data[i] >= 'a' && data[i] <= 'z') {
-            n = data[i] - 'a' + 10;
-        } else if(data[i] >= 'A' && data[i] <= 'Z') {
-            n = data[i] - 'A' + 10;
+        } else if(data[i] >= 'a' && data[i] <= 'f') {
+            n = data[i] - 'a' + 0xa;
+        } else if(data[i] >= 'A' && data[i] <= 'F') {
+            n = data[i] - 'A' + 0xa;
         } else {
-            ret = -1;
-            break;
+            return -1;
         }
-        *result += n * base;
-        if(i == 0) {
-            break;
-        }
-        i--;
-        base *= radix;
+        *result += n << base;
+        base += 4;
     }
-    return ret;
+    return 0;
 }
 
 int http_parse_request_line(char *data, size_t data_len, 
@@ -50,9 +46,16 @@ int http_parse_request_line(char *data, size_t data_len,
     *read_len = 0;
     char *pos[3];
     int j = 0;
-    for(size_t i = 0; i < data_len && j < 3; i++) {
-        if(data[i] == ' ' || (data[i] == '\r' && i + 1 < data_len && data[i + 1] == '\n')) {
+    for(size_t i = 0; i < data_len; i++) {
+        if(data[i] == ' ') {
             pos[j++] = data + i;
+        } else if(data[i] == '\r') {
+            if(j == 2 && i + 1 < data_len && data[i + 1] == '\n') {
+                pos[j++] = data + i;
+                break;
+            } else {
+                return -1;
+            }
         }
     }
     if(j == 3) {
@@ -156,14 +159,14 @@ int http_parse_chunked(char *data, size_t data_len,
             p2 = data + i;
         } else if(data[i] == '\r') {
             p3 = p2 == NULL ? data + i : p2;
-            if(str_parse_int(p1, p3 - p1, 16, &n) == 0) {
+            if(str_parse_hex(p1, p3 - p1, &n) == 0) {
                 if(i + 1 + n + 2 < data_len) {
                     if(n > 0) {
                         memmove(*body + *body_len, data + i + 2, n);
                         *body_len += n;
                         *read_len = i + 2 + n + 2;
                     } else {
-                        *read_len = i + 2 + 2;
+                        *read_len = i + 2;
                         break;
                     }
                     p1 = data + i + 2 + n + 2;

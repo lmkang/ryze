@@ -9,7 +9,6 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
-
 #include "list.h"
 #include "http_parser.h"
 
