@@ -1,11 +1,5 @@
 #include <string.h>
-
-struct http_header {
-    char *name;
-    size_t name_len;
-    char *value;
-    size_t value_len;
-};
+#include "http_parser.h"
 
 static const char *token_char_map = 
     "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
@@ -18,9 +12,6 @@ static const char *token_char_map =
     "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
 static int str_parse_hex(const char *data, int data_len, size_t *result) {
-    if(data_len <= 0) {
-        return -1;
-    }
     *result = 0;
     size_t base = 0;
     int n = 0;
@@ -123,9 +114,6 @@ int http_parse_header(char *data, size_t data_len,
             } else if(j > 0) {
                 // line folding
                 p = p1 + 1;
-                while(*p == ' ' || *p == '\t') {
-                    p++;
-                }
                 int len = data + i - p;
                 if(len > 0) {
                     h = &headers[j - 1];
@@ -151,27 +139,29 @@ int http_parse_chunked(char *data, size_t data_len,
     *body = data;
     *body_len = 0;
     *read_len = 0;
-    char *p1 = data, *p2 = NULL, *p3;
-    size_t n;
+    char *p1 = data, *p2 = NULL;
+    size_t n, s;
+    int d;
     for(size_t i = 0; i < data_len; i++) {
         // chunk-extension
         if(data[i] == ';') {
             p2 = data + i;
         } else if(data[i] == '\r') {
-            p3 = p2 == NULL ? data + i : p2;
-            if(str_parse_hex(p1, p3 - p1, &n) == 0) {
-                if(i + 1 + n + 2 < data_len) {
+            d = (p2 ? p2 : data + i) - p1;
+            if(d > 0 && str_parse_hex(p1, d, &n) == 0) {
+                s = i + 2 + n + 2;
+                if(s <= data_len) {
                     if(n > 0) {
                         memmove(*body + *body_len, data + i + 2, n);
                         *body_len += n;
-                        *read_len = i + 2 + n + 2;
+                        *read_len = s;
                     } else {
                         *read_len = i + 2;
                         break;
                     }
-                    p1 = data + i + 2 + n + 2;
+                    p1 = data + s;
                     p2 = NULL;
-                    i += 1 + n + 2;
+                    i = s;
                 } else {
                     return 1;
                 }
