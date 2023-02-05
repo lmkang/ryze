@@ -1,6 +1,5 @@
 #include <string.h>
 #include "http_parser.h"
-#include <stdio.h>
 
 static const char *token_char_map = 
     "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
@@ -14,15 +13,18 @@ static const char *token_char_map =
 
 static int str_parse_hex(const char *data, int data_len, size_t *result) {
     *result = 0;
+    char *p = data, *end = data + data_len;
     size_t base = 0;
     int n = 0;
-    for(int i = data_len - 1; i >= 0; i--) {
-        if(data[i] >= '0' && data[i] <= '9') {
-            n = data[i] - '0';
-        } else if(data[i] >= 'a' && data[i] <= 'f') {
-            n = data[i] - 'a' + 0xa;
-        } else if(data[i] >= 'A' && data[i] <= 'F') {
-            n = data[i] - 'A' + 0xa;
+    char c;
+    for(; p != end; p++) {
+        c = *p;
+        if(c >= '0' && c <= '9') {
+            n = c - '0';
+        } else if(c >= 'a' && c <= 'f') {
+            n = c - 'a' + 0xa;
+        } else if(c >= 'A' && c <= 'F') {
+            n = c - 'A' + 0xa;
         } else {
             return -1;
         }
@@ -103,8 +105,8 @@ int http_parse_header(char *data, size_t data_len,
                 break;
             }
         }
-        p = t;
         if(p3) {
+            p = t;
             if(*p1 != ' ' && *p1 != '\t') {
                 if(is_token && p2 && i < max_header) {
                     h = &headers[i];
@@ -125,7 +127,7 @@ int http_parse_header(char *data, size_t data_len,
             } else if(i > 0) {
                 // line folding
                 t = p1 + 1;
-                int len = p - 1 - t;
+                int len = p - t - 1;
                 if(len > 0) {
                     h = &headers[i - 1];
                     memmove(h->value + h->value_len, t, len);
@@ -143,6 +145,8 @@ int http_parse_header(char *data, size_t data_len,
                 p3 = NULL;
                 *read_len = t - data;
             }
+        } else {
+            return -1;
         }
     }
     return 1;
