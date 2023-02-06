@@ -13,7 +13,7 @@ static const char *token_char_map =
 
 static int str_parse_hex(const char *data, int data_len, size_t *result) {
     *result = 0;
-    char *p = data, *end = data + data_len;
+    char *p = (char *) data, *end = (char *) data + data_len;
     size_t base = 0;
     int n = 0;
     char c;
@@ -81,8 +81,8 @@ int http_parse_header(char *data, size_t data_len,
         int *nheader, size_t *read_len) {
     *nheader = 0;
     *read_len = 0;
-    char *p = data, *end = data + data_len;
-    char *p1 = data, *p2 = NULL, *p3 = NULL, *t;
+    char *p = data, *end = data + data_len, 
+        *p1 = data, *p2 = NULL, *p3 = NULL, *t;
     struct http_header *h;
     int i = 0, is_token;
     for(; p != end;) {
