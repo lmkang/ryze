@@ -135,6 +135,7 @@ int http_parse_header(char *data, size_t data_len,
                 }
             }
             t = ++p;
+            *read_len = t - data;
             if(t != end) {
                 if(*t == '\r' && ++p != end && *p == '\n') {
                     *read_len = p - data + 1;
@@ -143,7 +144,6 @@ int http_parse_header(char *data, size_t data_len,
                 p1 = t;
                 p2 = NULL;
                 p3 = NULL;
-                *read_len = t - data;
             }
         } else {
             return -1;

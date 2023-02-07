@@ -13,17 +13,13 @@ int http_parse_request(char *data, size_t data_len,
     size_t len;
     int ret = http_parse_request_line(data, data_len, method, method_len, 
         path, path_len, minor_version, &len);
-    if(ret != 0) {
-        return ret;
-    }
+    assert(ret == 0);
     *read_len += len;
     ret = http_parse_header(data + *read_len, data_len - *read_len, 
         headers, max_header, nheader, &len);
-    if(ret != 0) {
-        return ret;
-    }
+    assert(ret == 0);
     *read_len += len;
-    body_len = 0;
+    *body_len = 0;
     if(*read_len < data_len) {
         *body = data + *read_len;
         *body_len = data_len - *read_len;
