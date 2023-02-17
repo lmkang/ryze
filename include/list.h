@@ -30,8 +30,6 @@
 
 #define LIST_EMPTY(head) ((head)->next == (head))
 
-#define LIST_NOT_EMPTY(head) ((head)->next != (head))
-
 struct list_head {
     struct list_head *prev;
     struct list_head *next;

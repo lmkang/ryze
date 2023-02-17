@@ -11,8 +11,8 @@ static const char *token_char_map =
     "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
     "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
-static int str_parse_hex(const char *data, int data_len, size_t *result) {
-    *result = 0;
+static int str_parse_hex(const char *data, int data_len) {
+    int result = 0;
     char *p = (char *) data, *end = (char *) data + data_len;
     size_t base = 0;
     int n = 0;
@@ -28,16 +28,15 @@ static int str_parse_hex(const char *data, int data_len, size_t *result) {
         } else {
             return -1;
         }
-        *result += n << base;
+        result += n << base;
         base += 4;
     }
-    return 0;
+    return result;
 }
 
 int http_parse_request_line(char *data, size_t data_len, 
-        char **method, size_t *method_len, char **path, size_t *path_len, 
-        int *minor_version, size_t *read_len) {
-    *read_len = 0;
+        char **method, size_t *method_len, 
+        char **path, size_t *path_len, int *minor_version) {
     char *pos[3];
     char *p = data, *end = data + data_len;
     int i = 0;
@@ -70,25 +69,22 @@ int http_parse_request_line(char *data, size_t data_len,
         *path = pos[0] + 1;
         *path_len = pos[1] - *path;
         *minor_version = *++p - '0';
-        *read_len = pos[2] - data + 1;
-        return 0;
+        return pos[2] - data + 1;
     }
-    return 1;
+    return -2;
 }
 
 int http_parse_header(char *data, size_t data_len, 
-        struct http_header *headers, int max_header, 
-        int *nheader, size_t *read_len) {
-    *nheader = 0;
-    *read_len = 0;
+        struct http_header *headers, int max_header, int *header_len) {
+    *header_len = 0;
+    int read_len = -2;
     char *p = data, *end = data + data_len, 
         *p1 = data, *p2 = NULL, *p3 = NULL, *t;
     struct http_header *h;
     int i = 0, is_token;
     for(; p != end;) {
-        t = p1;
         is_token = 1;
-        for(;; t++) {
+        for(t = p1; ; t++) {
             // token = 1*<any CHAR except CTLs or separators>
             if(!token_char_map[(unsigned char) *t]) {
                 if(*t == ':') {
@@ -122,7 +118,7 @@ int http_parse_header(char *data, size_t data_len,
                         t--;
                     }
                     h->value_len = t + 1 - h->value;
-                    *nheader = ++i;
+                    *header_len = ++i;
                 }
             } else if(i > 0) {
                 // line folding
@@ -135,11 +131,10 @@ int http_parse_header(char *data, size_t data_len,
                 }
             }
             t = ++p;
-            *read_len = t - data;
+            read_len = t - data;
             if(t != end) {
                 if(*t == '\r' && ++p != end && *p == '\n') {
-                    *read_len = p - data + 1;
-                    return 0;
+                    break;
                 }
                 p1 = t;
                 p2 = NULL;
@@ -149,17 +144,41 @@ int http_parse_header(char *data, size_t data_len,
             return -1;
         }
     }
-    return 1;
+    return read_len;
 }
 
-int http_parse_chunked(char *data, size_t data_len, 
-        char **body, size_t *body_len, size_t *read_len) {
-    *body = data;
-    *body_len = 0;
-    *read_len = 0;
-    char *p1 = data, *p2 = NULL;
-    size_t n, s;
-    int d;
+int http_parse_chunked(char *data, size_t data_len, int *buf_len) {
+    *buf_len = 0;
+    char *p1 = data, *p2 = NULL, *t, *p = data, *end = data + data_len;
+    size_t s;
+    int read_len = 0, n, d;
+    for(; p != end; p++) {
+        if(*p == ';') {
+            p2 = p;
+        } else if(*p == '\r') {
+            d = (p2 ? p2 : p) - p1;
+            if(d > 0 && (n = str_parse_hex(p1, d)) >= 0) {
+                s = p - p1 + 2 + n;
+                if(s + 2 <= data_len) {
+                    if(n > 0) {
+                        p += 2;
+                        memmove(data + *buf_len, p, n);
+                        *buf_len += n;
+                        read_len = s;
+                    } else {
+                        read_len = s;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                return -1;
+            }
+        }
+    }
+    return read_len;
+    
+    
     for(size_t i = 0; i < data_len; i++) {
         // chunk-extension
         if(data[i] == ';') {
