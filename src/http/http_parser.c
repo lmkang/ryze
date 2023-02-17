@@ -150,23 +150,23 @@ int http_parse_header(char *data, size_t data_len,
 int http_parse_chunked(char *data, size_t data_len, int *buf_len) {
     *buf_len = 0;
     char *p1 = data, *p2 = NULL, *t, *p = data, *end = data + data_len;
-    size_t s;
-    int read_len = 0, n, d;
+    int read_len = 0, n, d, s;
     for(; p != end; p++) {
         if(*p == ';') {
             p2 = p;
         } else if(*p == '\r') {
             d = (p2 ? p2 : p) - p1;
             if(d > 0 && (n = str_parse_hex(p1, d)) >= 0) {
-                s = p - p1 + 2 + n;
-                if(s + 2 <= data_len) {
+                d = p - p1 + 2 + n;
+                s = d + 2;
+                if(s <= data_len) {
                     if(n > 0) {
                         p += 2;
                         memmove(data + *buf_len, p, n);
                         *buf_len += n;
                         read_len = s;
                     } else {
-                        read_len = s;
+                        read_len = d;
                     }
                 } else {
                     break;
