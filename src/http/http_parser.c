@@ -35,8 +35,8 @@ static int str_parse_hex(const char *data, int data_len) {
 }
 
 int http_parse_request_line(char *data, size_t data_len, 
-        char **method, size_t *method_len, 
-        char **path, size_t *path_len, int *minor_version) {
+        char **method, size_t *method_len, char **path, 
+        size_t *path_len, int *minor_version) {
     char *pos[3];
     char *p = data, *end = data + data_len;
     int i = 0;
@@ -122,12 +122,9 @@ int http_parse_header(char *data, size_t data_len,
                 }
             } else if(i > 0) {
                 // line folding
-                t = p1 + 1;
-                int len = p - t - 1;
+                int len = p - p1 - 1;
                 if(len > 0) {
-                    h = &headers[i - 1];
-                    memmove(h->value + h->value_len, t, len);
-                    h->value_len += len;
+                    headers[i - 1].value_len += len;
                 }
             }
             t = ++p;
@@ -147,65 +144,20 @@ int http_parse_header(char *data, size_t data_len,
     return read_len;
 }
 
-int http_parse_chunked(char *data, size_t data_len, int *buf_len) {
-    *buf_len = 0;
-    char *p1 = data, *p2 = NULL, *t, *p = data, *end = data + data_len;
-    int read_len = 0, n, d, s;
+int http_decode_chunked(char *data, size_t data_len, int *offset) {
+    char *p1 = data, *p2 = NULL, *p = data, *end = data + data_len;
     for(; p != end; p++) {
         if(*p == ';') {
             p2 = p;
         } else if(*p == '\r') {
-            d = (p2 ? p2 : p) - p1;
-            if(d > 0 && (n = str_parse_hex(p1, d)) >= 0) {
-                d = p - p1 + 2 + n;
-                s = d + 2;
-                if(s <= data_len) {
-                    if(n > 0) {
-                        p += 2;
-                        memmove(data + *buf_len, p, n);
-                        *buf_len += n;
-                        read_len = s;
-                    } else {
-                        read_len = d;
-                    }
-                } else {
-                    break;
-                }
+            int n = p - p1;
+            if(n > 0 && (n = str_parse_hex(p1, n)) > 0) {
+                *offset = p - data + 2;
+                return n;
             } else {
                 return -1;
             }
         }
     }
-    return read_len;
-    
-    
-    for(size_t i = 0; i < data_len; i++) {
-        // chunk-extension
-        if(data[i] == ';') {
-            p2 = data + i;
-        } else if(data[i] == '\r') {
-            d = (p2 ? p2 : data + i) - p1;
-            if(d > 0 && str_parse_hex(p1, d, &n) == 0) {
-                s = i + 2 + n + 2;
-                if(s <= data_len) {
-                    if(n > 0) {
-                        memmove(*body + *body_len, data + i + 2, n);
-                        *body_len += n;
-                        *read_len = s;
-                    } else {
-                        *read_len = i + 2;
-                        break;
-                    }
-                    p1 = data + s;
-                    p2 = NULL;
-                    i = s;
-                } else {
-                    return 1;
-                }
-            } else {
-                return -1;
-            }
-        }
-    }
-    return 0;
+    return -1;
 }

@@ -2,52 +2,36 @@
 #include <stdlib.h>
 #include <string.h>
 #include "list.h"
-#include "http_parser.h"
+#include "common.h"
+#include "http_server.h"
 
-struct http_buffer {
-    char *data;
-    size_t length;
-    size_t offset;
-    size_t capacity;
-    struct list_head entry;
-};
+int http_request_init(struct http_request *request) {
+    request->header_len = 64;
+    request->headers = malloc(request->header_len * sizeof(struct http_header));
+    request->minor_version = 1;
+    request->parse_status = 0;
+    request->is_chunked = 0;
+    request->is_keepalive = 1;
+    request->content_length = -1;
+    request->keepalive_request = 0;
+    LIST_INIT(&request->sndbuf_list);
+    LIST_INIT(&request->rcvbuf_list);
+}
 
-struct http_request {
-    int fd;
-    char *method;
-    size_t method_len;
-    char *path;
-    size_t path_len;
-    int minor_version;
-    struct http_header *headers;
-    int header_len;
-    struct http_buffer *body_buffer;
-    size_t content_length;
-    int is_chunked;
-    int is_keepalive;
-    int keepalive_endtime;
-    int keepalive_request;
-    struct list_head sndbuf_list;
-    struct list_head rcvbuf_list;
-    struct list_head entry;
-};
-
-struct http_server {
-    int fd;
-    int sock_af;
-    int sock_type;
-    int sock_backlog;
-    int so_reuseaddr;
-    int so_reuseport;
-    int so_keepalive;
-    int tcp_nodelay;
-    int keepalive_timeout;
-    int keepalive_max;
-    int port;
-    char host[46];
-    struct list_head request_list;
-    void (*on_header_complete)(struct http_request *request);
-};
+int http_request_parse(struct http_request *request) {
+    struct list_head *rcvbuf_list = &request->rcvbuf_list;
+    struct list_head *entry;
+    struct linked_buffer *buffer;
+    int ret = -1;
+    while(!LIST_EMPTY(rcvbuf_list)) {
+        entry = rcvbuf_list->next;
+        buffer = LIST_ENTRY(entry, struct linked_buffer, entry);
+        ret = http_parse_request_line(buffer->data, buffer->length, 
+            &request->method, &request->method_len, &request->path, 
+            &request->path_len, &request->minor_version);
+        
+    }
+}
 
 int http_server_init(struct http_server *server) {
     int fd = socket(server->sock_af, server->sock_type, 0);
@@ -90,46 +74,6 @@ int http_server_init(struct http_server *server) {
     return -1;
 }
 
-void http_request_free(struct http_request *request) {
-    if(close(request->fd)) {
-        fprintf(stderr, "[%d]: %s\n", errno, strerror(errno));
-    }
-    struct http_buffer *buffer;
-    struct list_head *entry;
-    struct list_head *list = &request->sndbuf_list;
-    while(!LIST_EMPTY(list)) {
-        entry = list->next;
-        LIST_DEL(entry);
-        buffer = LIST_ENTRY(entry, struct http_buffer, entry);
-        free(buffer);
-    }
-    list = &request->rcvbuf_list;
-    while(!LIST_EMPTY(list)) {
-        entry = list->next;
-        LIST_DEL(entry);
-        buffer = LIST_ENTRY(entry, struct http_buffer, entry);
-        free(buffer);
-    }
-    free(request->headers);
-    free(request);
-}
-
-void http_server_free(struct http_server *server) {
-    if(close(server->fd)) {
-        fprintf(stderr, "[%d]: %s\n", errno, strerror(errno));
-    }
-    struct list_head *request_list = &server->request_list;
-    struct list_head *entry;
-    struct http_request *request;
-    while(!LIST_EMPTY(request_list)) {
-        entry = request_list->next;
-        LIST_DEL(entry);
-        request = LIST_ENTRY(entry, struct http_request, entry);
-        http_request_free(request);
-    }
-    free(server);
-}
-
 int http_server_listen(struct http_server *server) {
     struct sockaddr_in addr;
     bzero(&addr, sizeof(addr));
@@ -148,7 +92,7 @@ int http_server_listen(struct http_server *server) {
             fprintf(stderr, "[%d]: %s\n", errno, strerror(errno));
             break;
         }
-        if(listen(server->fd, server->sock_backlog)) {
+        if(listen(server->fd, server->backlog)) {
             fprintf(stderr, "[%d]: %s\n", errno, strerror(errno));
             break;
         }
@@ -156,12 +100,4 @@ int http_server_listen(struct http_server *server) {
     } while(0);
     close(server->fd);
     return -1;
-}
-
-void http_server_on_accept(struct http_server *server) {
-    
-}
-
-void http_server_on_keepalive(struct http_server *server) {
-    
 }
